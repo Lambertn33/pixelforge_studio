@@ -29,7 +29,7 @@ createInertiaApp({
     title: (title) =>
         title ? `${title} — PixelForge Studio` : 'PixelForge Studio',
     progress: {
-        color: '#18181b',
+        color: '#9ae600',
     },
     withApp(app: App) {
         app.component('VIcon', OhVueIcon);

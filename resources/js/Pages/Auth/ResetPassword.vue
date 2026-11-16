@@ -23,54 +23,54 @@ const submit = () => {
 
 <template>
     <GuestLayout title="Reset password">
-        <h1 class="mb-6 text-xl font-semibold">Reset password</h1>
+        <h1 class="mb-6 text-xl font-semibold text-ink">Reset password</h1>
 
         <form class="space-y-4" @submit.prevent="submit">
             <div>
-                <label for="email" class="mb-1 block text-sm font-medium">Email</label>
+                <label for="email" class="mb-1 block text-sm font-medium text-ink">Email</label>
                 <input
                     id="email"
                     v-model="form.email"
                     type="email"
                     required
                     autofocus
-                    class="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
+                    class="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink outline-none focus:border-accent"
                 >
-                <p v-if="form.errors.email" class="mt-1 text-sm text-red-600">
+                <p v-if="form.errors.email" class="mt-1 text-sm text-danger">
                     {{ form.errors.email }}
                 </p>
             </div>
 
             <div>
-                <label for="password" class="mb-1 block text-sm font-medium">Password</label>
+                <label for="password" class="mb-1 block text-sm font-medium text-ink">Password</label>
                 <input
                     id="password"
                     v-model="form.password"
                     type="password"
                     required
                     autocomplete="new-password"
-                    class="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
+                    class="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink outline-none focus:border-accent"
                 >
-                <p v-if="form.errors.password" class="mt-1 text-sm text-red-600">
+                <p v-if="form.errors.password" class="mt-1 text-sm text-danger">
                     {{ form.errors.password }}
                 </p>
             </div>
 
             <div>
-                <label for="password_confirmation" class="mb-1 block text-sm font-medium">Confirm password</label>
+                <label for="password_confirmation" class="mb-1 block text-sm font-medium text-ink">Confirm password</label>
                 <input
                     id="password_confirmation"
                     v-model="form.password_confirmation"
                     type="password"
                     required
                     autocomplete="new-password"
-                    class="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
+                    class="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink outline-none focus:border-accent"
                 >
             </div>
 
             <button
                 type="submit"
-                class="w-full rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
+                class="w-full rounded-full bg-accent px-4 py-2.5 text-sm font-semibold text-accent-ink transition hover:brightness-110 disabled:opacity-60"
                 :disabled="form.processing"
             >
                 Reset password

@@ -7,7 +7,7 @@
         @vite(['resources/js/app.ts'])
         <x-inertia::head />
     </head>
-    <body class="antialiased">
+    <body class="bg-surface text-ink antialiased">
         <x-inertia::app />
     </body>
 </html>

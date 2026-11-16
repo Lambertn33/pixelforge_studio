@@ -4,8 +4,28 @@
 @source '../../storage/framework/views/*.php';
 @source '../**/*.blade.php';
 @source '../**/*.js';
+@source '../**/*.ts';
+@source '../**/*.vue';
 
 @theme {
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+
+    /* PromptEdit-inspired PixelForge palette */
+    --color-surface: #1f1f1f;
+    --color-surface-raised: #262626;
+    --color-ink: #ffffff;
+    --color-muted: #a3a3a3;
+    --color-border: #333333;
+    --color-accent: #9ae600;
+    --color-accent-ink: #111111;
+    --color-danger: #f87171;
+    --color-success: #9ae600;
+}
+
+@layer base {
+    html,
+    body {
+        @apply bg-surface text-ink antialiased;
+    }
 }

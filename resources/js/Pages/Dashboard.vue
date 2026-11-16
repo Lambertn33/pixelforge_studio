@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
+import AppLayout from '@/layouts/AppLayout.vue';
+import { Link } from '@inertiajs/vue3';
 
 defineProps<{
     auth: {
@@ -10,39 +11,58 @@ defineProps<{
         } | null;
     };
 }>();
-
-const logout = () => {
-    router.post('/logout');
-};
 </script>
 
 <template>
-    <Head title="Dashboard" />
+    <AppLayout title="Dashboard">
+        <p class="mb-3 text-xs font-medium uppercase tracking-[0.2em] text-muted">
+            Studio
+        </p>
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">
+            Welcome back, {{ auth.user?.name }}
+        </h1>
+        <p class="mt-3 max-w-2xl text-muted">
+            Generate images, track progress, and review costs — all in one place.
+        </p>
 
-    <div class="min-h-screen bg-zinc-50 text-zinc-900">
-        <header class="border-b border-zinc-200 bg-white">
-            <div class="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
-                <div class="font-semibold tracking-tight">PixelForge Studio</div>
-                <div class="flex items-center gap-4 text-sm">
-                    <span class="text-zinc-600">{{ auth.user?.name }}</span>
-                    <button
-                        type="button"
-                        class="font-medium underline-offset-4 hover:underline"
-                        @click="logout"
-                    >
-                        Log out
-                    </button>
+        <div class="mt-10 grid gap-0 overflow-hidden rounded-2xl border border-border md:grid-cols-3">
+            <div class="border-border p-6 md:border-r">
+                <div class="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-accent-ink">
+                    <VIcon name="hi-plus" scale="1.1" />
                 </div>
+                <h2 class="text-lg font-semibold text-ink">Create</h2>
+                <p class="mt-2 text-sm text-muted">
+                    Write a prompt, pick size and quality, then generate.
+                </p>
             </div>
-        </header>
+            <div class="border-border p-6 md:border-r">
+                <div class="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-accent-ink">
+                    <VIcon name="hi-photograph" scale="1.1" />
+                </div>
+                <h2 class="text-lg font-semibold text-ink">Review</h2>
+                <p class="mt-2 text-sm text-muted">
+                    Follow queued and processing jobs until images are ready.
+                </p>
+            </div>
+            <div class="p-6">
+                <div class="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-accent-ink">
+                    <VIcon name="hi-user" scale="1.1" />
+                </div>
+                <h2 class="text-lg font-semibold text-ink">Account</h2>
+                <p class="mt-2 text-sm text-muted">
+                    See estimated vs actual costs for every generation.
+                </p>
+            </div>
+        </div>
 
-        <main class="mx-auto max-w-5xl px-6 py-10">
-            <h1 class="text-2xl font-semibold tracking-tight">
-                Welcome, {{ auth.user?.name }}
-            </h1>
-            <p class="mt-2 text-zinc-600">
-                Inertia + Vue is wired. Generation UI comes next.
-            </p>
-        </main>
-    </div>
+        <div class="mt-8">
+            <Link
+                href="/dashboard"
+                class="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-accent-ink transition hover:brightness-110"
+            >
+                <VIcon name="hi-plus" scale="0.95" />
+                Generate image
+            </Link>
+        </div>
+    </AppLayout>
 </template>
