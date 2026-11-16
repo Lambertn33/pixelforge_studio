@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import GuestLayout from '@/Layouts/GuestLayout.vue';
+import GuestLayout from '@/layouts/GuestLayout.vue';
 import { useForm } from '@inertiajs/vue3';
 
 const props = defineProps<{
