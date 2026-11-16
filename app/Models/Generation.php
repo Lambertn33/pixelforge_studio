@@ -57,6 +57,14 @@ class Generation extends Model
         return $this->hasMany(WebhookEvent::class);
     }
 
+    /**
+     * @return HasMany<CreditTransaction, $this>
+     */
+    public function creditTransactions(): HasMany
+    {
+        return $this->hasMany(CreditTransaction::class);
+    }
+
     public function isTerminal(): bool
     {
         return $this->status->isTerminal();
