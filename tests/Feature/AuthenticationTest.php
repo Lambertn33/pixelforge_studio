@@ -58,7 +58,11 @@ test('authenticated users can visit the dashboard', function () {
 
     $this->actingAs($user)
         ->get(route('dashboard'))
-        ->assertOk();
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Dashboard')
+            ->where('auth.user.id', $user->id)
+            ->where('auth.user.email', $user->email));
 });
 
 test('users can logout', function () {
