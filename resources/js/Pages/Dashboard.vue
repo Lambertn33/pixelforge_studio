@@ -1,14 +1,12 @@
 <script setup lang="ts">
+import TheButton from '@/components/ui/TheButton.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
+import type { AuthUser } from '@/types';
 import { Link } from '@inertiajs/vue3';
 
 defineProps<{
     auth: {
-        user: {
-            id: number;
-            name: string;
-            email: string;
-        } | null;
+        user: AuthUser | null;
     };
 }>();
 </script>
@@ -56,12 +54,11 @@ defineProps<{
         </div>
 
         <div class="mt-8">
-            <Link
-                href="/dashboard"
-                class="inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-accent-ink transition hover:brightness-110"
-            >
-                <VIcon name="hi-plus" scale="0.95" />
-                Generate image
+            <Link href="/dashboard">
+                <TheButton type="button">
+                    <VIcon name="hi-plus" scale="0.95" />
+                    Generate image
+                </TheButton>
             </Link>
         </div>
     </AppLayout>

@@ -4,6 +4,10 @@ import { Head, Link } from '@inertiajs/vue3';
 defineProps<{
     title: string;
 }>();
+
+defineSlots<{
+    default: () => unknown;
+}>();
 </script>
 
 <template>

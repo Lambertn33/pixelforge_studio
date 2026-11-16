@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { AuthProps } from '@/types/auth';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
@@ -6,15 +7,16 @@ defineProps<{
     title: string;
 }>();
 
-const page = usePage();
-const user = computed(
-    () =>
-        (
-            page.props.auth as {
-                user: { id: number; name: string; email: string } | null;
-            }
-        ).user,
-);
+defineSlots<{
+    default: () => unknown;
+}>();
+
+const page = usePage<{
+    auth: AuthProps;
+    [key: string]: unknown;
+}>();
+
+const user = computed(() => page.props.auth.user);
 
 const logout = () => {
     router.post('/logout');

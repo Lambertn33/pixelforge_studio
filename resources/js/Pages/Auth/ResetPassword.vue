@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import TheButton from '@/components/ui/TheButton.vue';
+import TheInput from '@/components/ui/TheInput.vue';
 import GuestLayout from '@/layouts/GuestLayout.vue';
 import { useForm } from '@inertiajs/vue3';
 
@@ -26,55 +28,38 @@ const submit = () => {
         <h1 class="mb-6 text-xl font-semibold text-ink">Reset password</h1>
 
         <form class="space-y-4" @submit.prevent="submit">
-            <div>
-                <label for="email" class="mb-1 block text-sm font-medium text-ink">Email</label>
-                <input
-                    id="email"
-                    v-model="form.email"
-                    type="email"
-                    required
-                    autofocus
-                    class="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink outline-none focus:border-accent"
-                >
-                <p v-if="form.errors.email" class="mt-1 text-sm text-danger">
-                    {{ form.errors.email }}
-                </p>
-            </div>
+            <TheInput
+                id="email"
+                v-model="form.email"
+                type="email"
+                label="Email"
+                required
+                autofocus
+                :error="form.errors.email"
+            />
 
-            <div>
-                <label for="password" class="mb-1 block text-sm font-medium text-ink">Password</label>
-                <input
-                    id="password"
-                    v-model="form.password"
-                    type="password"
-                    required
-                    autocomplete="new-password"
-                    class="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink outline-none focus:border-accent"
-                >
-                <p v-if="form.errors.password" class="mt-1 text-sm text-danger">
-                    {{ form.errors.password }}
-                </p>
-            </div>
+            <TheInput
+                id="password"
+                v-model="form.password"
+                type="password"
+                label="Password"
+                autocomplete="new-password"
+                required
+                :error="form.errors.password"
+            />
 
-            <div>
-                <label for="password_confirmation" class="mb-1 block text-sm font-medium text-ink">Confirm password</label>
-                <input
-                    id="password_confirmation"
-                    v-model="form.password_confirmation"
-                    type="password"
-                    required
-                    autocomplete="new-password"
-                    class="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-ink outline-none focus:border-accent"
-                >
-            </div>
+            <TheInput
+                id="password_confirmation"
+                v-model="form.password_confirmation"
+                type="password"
+                label="Confirm password"
+                autocomplete="new-password"
+                required
+            />
 
-            <button
-                type="submit"
-                class="w-full rounded-full bg-accent px-4 py-2.5 text-sm font-semibold text-accent-ink transition hover:brightness-110 disabled:opacity-60"
-                :disabled="form.processing"
-            >
+            <TheButton type="submit" class="w-full" :disabled="form.processing">
                 Reset password
-            </button>
+            </TheButton>
         </form>
     </GuestLayout>
 </template>
