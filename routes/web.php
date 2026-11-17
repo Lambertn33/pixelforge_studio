@@ -1,23 +1,15 @@
 <?php
 
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GenerationController;
+use App\Http\Controllers\HomeController;
 use App\Http\Controllers\UsageController;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
-Route::get('/', function () {
-    if (Auth::check()) {
-        return redirect()->route('dashboard');
-    }
-
-    return Inertia::render('Welcome');
-})->name('home');
+Route::get('/', HomeController::class)->name('home');
 
 Route::middleware('auth')->group(function () {
-    Route::get('/dashboard', function () {
-        return Inertia::render('Dashboard');
-    })->name('dashboard');
+    Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
     Route::post('/generations/estimate', [GenerationController::class, 'estimate'])
         ->name('generations.estimate');
