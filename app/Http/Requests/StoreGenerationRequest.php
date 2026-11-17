@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Enums\GenerationQuality;
 use App\Enums\GenerationSize;
+use App\Models\Generation;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -12,7 +13,7 @@ class StoreGenerationRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user() !== null;
+        return $this->user()?->can('create', Generation::class) ?? false;
     }
 
     /**
