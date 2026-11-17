@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\GenerationStatus;
 use App\Jobs\Pixelforge\ProcessWebhook;
 use App\Models\Generation;
 use App\Models\WebhookEvent;
@@ -26,52 +27,26 @@ it('skips events that were already processed', function () {
     expect($event->fresh()->processed_at?->eq($processedAt))->toBeTrue();
 });
 
-it('associates a generation by pixelforge id', function () {
-    $generation = Generation::factory()->processing()->create([
-        'pixelforge_id' => 'gen_01RESOLVEBYPROVIDERID0000001',
-    ]);
-
-    $event = WebhookEvent::factory()->succeeded()->create([
-        'generation_id' => null,
-        'payload' => [
-            'id' => 'evt_01RESOLVEBYPROVIDERID0000001',
-            'object' => 'event',
-            'type' => 'generation.succeeded',
-            'data' => [
-                'object' => [
-                    'id' => 'gen_01RESOLVEBYPROVIDERID0000001',
-                    'status' => 'succeeded',
-                    'metadata' => [],
-                ],
-            ],
-        ],
-    ]);
-
-    (new ProcessWebhook($event->id))->handle(app(WebhookProcessor::class));
-
-    expect($event->fresh()->generation_id)->toBe($generation->id)
-        ->and($event->fresh()->processed_at)->toBeNull();
-});
-
-it('associates a generation by client_request_id before pixelforge id exists', function () {
+it('moves a queued generation to processing', function () {
     $clientRequestId = (string) Str::uuid();
 
     $generation = Generation::factory()->create([
         'client_request_id' => $clientRequestId,
         'pixelforge_id' => null,
-        'metadata' => ['client_request_id' => $clientRequestId],
+        'status' => GenerationStatus::Queued,
     ]);
 
     $event = WebhookEvent::factory()->create([
         'generation_id' => null,
         'payload' => [
-            'id' => 'evt_01EARLYWEBHOOK0000000000001',
+            'id' => 'evt_01PROCESSINGSTATE000000001',
             'object' => 'event',
             'type' => 'generation.processing',
             'data' => [
                 'object' => [
-                    'id' => 'gen_01EARLYWEBHOOK0000000000001',
+                    'id' => 'gen_01PROCESSINGSTATE000000001',
                     'status' => 'processing',
+                    'started_at' => '2026-11-17T10:00:05Z',
                     'metadata' => [
                         'client_request_id' => $clientRequestId,
                     ],
@@ -86,8 +61,122 @@ it('associates a generation by client_request_id before pixelforge id exists', f
     $event->refresh();
 
     expect($event->generation_id)->toBe($generation->id)
-        ->and($generation->pixelforge_id)->toBe('gen_01EARLYWEBHOOK0000000000001')
-        ->and($event->processed_at)->toBeNull();
+        ->and($event->processed_at)->not->toBeNull()
+        ->and($generation->status)->toBe(GenerationStatus::Processing)
+        ->and($generation->pixelforge_id)->toBe('gen_01PROCESSINGSTATE000000001')
+        ->and($generation->started_at)->not->toBeNull();
+});
+
+it('applies a succeeded generation payload', function () {
+    $generation = Generation::factory()->processing()->create([
+        'pixelforge_id' => 'gen_01SUCCEEDEDSTATE0000000001',
+    ]);
+
+    $event = WebhookEvent::factory()->succeeded()->create([
+        'generation_id' => null,
+        'payload' => [
+            'id' => 'evt_01SUCCEEDEDSTATE0000000001',
+            'object' => 'event',
+            'type' => 'generation.succeeded',
+            'data' => [
+                'object' => [
+                    'id' => 'gen_01SUCCEEDEDSTATE0000000001',
+                    'status' => 'succeeded',
+                    'image_url' => 'https://pixelforge.test/images/done.png?expires=1762351409&signature=abc',
+                    'usage' => [
+                        'input_text_tokens' => 12,
+                        'input_image_tokens' => 0,
+                        'output_tokens' => 1100,
+                        'reasoning_tokens' => 500,
+                        'total_tokens' => 1612,
+                    ],
+                    'completed_at' => '2026-11-17T10:00:30Z',
+                    'metadata' => [],
+                ],
+            ],
+        ],
+    ]);
+
+    (new ProcessWebhook($event->id))->handle(app(WebhookProcessor::class));
+
+    $generation->refresh();
+    $event->refresh();
+
+    expect($event->processed_at)->not->toBeNull()
+        ->and($generation->status)->toBe(GenerationStatus::Succeeded)
+        ->and($generation->image_url)->toStartWith('https://pixelforge.test/images/done.png')
+        ->and($generation->image_url_expires_at?->getTimestamp())->toBe(1762351409)
+        ->and($generation->usage['total_tokens'])->toBe(1612)
+        ->and($generation->completed_at)->not->toBeNull();
+});
+
+it('applies a failed generation payload', function () {
+    $generation = Generation::factory()->processing()->create([
+        'pixelforge_id' => 'gen_01FAILEDSTATE0000000000001',
+    ]);
+
+    $event = WebhookEvent::factory()->failed()->create([
+        'generation_id' => null,
+        'payload' => [
+            'id' => 'evt_01FAILEDSTATE0000000000001',
+            'object' => 'event',
+            'type' => 'generation.failed',
+            'data' => [
+                'object' => [
+                    'id' => 'gen_01FAILEDSTATE0000000000001',
+                    'status' => 'failed',
+                    'error' => [
+                        'code' => 'generation_failed',
+                        'message' => 'The model could not produce an image for the prompt.',
+                    ],
+                    'completed_at' => '2026-11-17T10:00:30Z',
+                    'metadata' => [],
+                ],
+            ],
+        ],
+    ]);
+
+    (new ProcessWebhook($event->id))->handle(app(WebhookProcessor::class));
+
+    $generation->refresh();
+
+    expect($generation->status)->toBe(GenerationStatus::Failed)
+        ->and($generation->error_code)->toBe('generation_failed')
+        ->and($generation->error_message)->toBe('The model could not produce an image for the prompt.')
+        ->and($generation->completed_at)->not->toBeNull()
+        ->and($event->fresh()->processed_at)->not->toBeNull();
+});
+
+it('does not regress a finished generation when a late processing event arrives', function () {
+    $generation = Generation::factory()->succeeded()->create([
+        'pixelforge_id' => 'gen_01NOREGRESSSTATE00000000001',
+        'image_url' => 'https://pixelforge.test/images/final.png',
+    ]);
+
+    $event = WebhookEvent::factory()->create([
+        'generation_id' => null,
+        'payload' => [
+            'id' => 'evt_01LATEPROCESSING00000000001',
+            'object' => 'event',
+            'type' => 'generation.processing',
+            'data' => [
+                'object' => [
+                    'id' => 'gen_01NOREGRESSSTATE00000000001',
+                    'status' => 'processing',
+                    'metadata' => [],
+                ],
+            ],
+        ],
+    ]);
+
+    (new ProcessWebhook($event->id))->handle(app(WebhookProcessor::class));
+
+    $generation->refresh();
+
+    expect($generation->status)->toBe(GenerationStatus::Succeeded)
+        ->and($generation->image_url)->toBe('https://pixelforge.test/images/final.png')
+        ->and($event->fresh()->processed_at)->not->toBeNull()
+        ->and($event->fresh()->generation_id)->toBe($generation->id);
 });
 
 it('leaves the event unprocessed when no generation can be resolved yet', function () {
