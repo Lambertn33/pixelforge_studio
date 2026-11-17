@@ -15,6 +15,13 @@ export interface Generation {
     estimated_customer_cost: string | null;
     actual_provider_cost: string | null;
     actual_customer_cost: string | null;
+    usage: {
+        input_text_tokens?: number;
+        input_image_tokens?: number;
+        output_tokens?: number;
+        reasoning_tokens?: number;
+        total_tokens?: number;
+    } | null;
     image_url: string | null;
     image_url_expires_at: string | null;
     error_code: string | null;

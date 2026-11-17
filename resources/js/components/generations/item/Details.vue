@@ -1,10 +1,27 @@
 <script setup lang="ts">
 import type { Generation } from '@/types';
 import { formatCost } from '@/utils/money';
+import { computed } from 'vue';
 
-defineProps<{
+const props = defineProps<{
     generation: Generation;
 }>();
+
+const usageRows = computed(() => {
+    const usage = props.generation.usage;
+
+    if (! usage) {
+        return [];
+    }
+
+    return [
+        { label: 'Input text', value: usage.input_text_tokens },
+        { label: 'Input image', value: usage.input_image_tokens },
+        { label: 'Output', value: usage.output_tokens },
+        { label: 'Reasoning', value: usage.reasoning_tokens },
+        { label: 'Total', value: usage.total_tokens },
+    ].filter((row) => typeof row.value === 'number');
+});
 </script>
 
 <template>
@@ -26,10 +43,28 @@ defineProps<{
                 <dd>{{ formatCost(generation.estimated_customer_cost) }}</dd>
             </div>
             <div class="flex items-center justify-between gap-3">
-                <dt class="text-muted">Actual</dt>
+                <dt class="text-muted">Actual (customer)</dt>
                 <dd>{{ formatCost(generation.actual_customer_cost) }}</dd>
             </div>
+            <div class="flex items-center justify-between gap-3">
+                <dt class="text-muted">Actual (provider)</dt>
+                <dd>{{ formatCost(generation.actual_provider_cost) }}</dd>
+            </div>
         </dl>
+
+        <div v-if="usageRows.length > 0" class="space-y-3 border-t border-border pt-4">
+            <h3 class="text-xs font-medium uppercase tracking-wide text-muted">Usage</h3>
+            <dl class="space-y-3">
+                <div
+                    v-for="row in usageRows"
+                    :key="row.label"
+                    class="flex items-center justify-between gap-3"
+                >
+                    <dt class="text-muted">{{ row.label }}</dt>
+                    <dd>{{ row.value?.toLocaleString() }}</dd>
+                </div>
+            </dl>
+        </div>
 
         <p
             v-if="generation.error_message"

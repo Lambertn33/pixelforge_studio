@@ -21,6 +21,7 @@ const currentPath = computed(() => page.url.split('?')[0] ?? page.url);
 const navLinks = [
     { href: '/generations/create', label: 'Start generating', match: '/generations/create' },
     { href: '/generations', label: 'My generations', match: '/generations' },
+    { href: '/usage', label: 'Usage', match: '/usage' },
 ] as const;
 
 const isActive = (match: string): boolean => {
@@ -61,12 +62,6 @@ const logout = (): void => {
                     >
                         {{ link.label }}
                     </Link>
-                    <span
-                        class="rounded-lg px-3 py-2 text-sm text-muted/50"
-                        title="Coming soon"
-                    >
-                        Billing
-                    </span>
                 </nav>
 
                 <div class="ml-auto flex items-center gap-4 text-sm">
@@ -104,9 +99,6 @@ const logout = (): void => {
                 >
                     {{ link.label }}
                 </Link>
-                <span class="whitespace-nowrap rounded-lg px-3 py-2 text-sm text-muted/50">
-                    Billing
-                </span>
             </nav>
         </header>
 

@@ -98,6 +98,7 @@ class GenerationController extends Controller
             'estimated_customer_cost' => $generation->estimated_customer_cost,
             'actual_provider_cost' => $generation->actual_provider_cost,
             'actual_customer_cost' => $generation->actual_customer_cost,
+            'usage' => $generation->usage,
             'image_url' => $generation->image_url,
             'image_url_expires_at' => $generation->image_url_expires_at?->toIso8601String(),
             'error_code' => $generation->error_code,

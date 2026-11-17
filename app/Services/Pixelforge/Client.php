@@ -38,9 +38,13 @@ class Client
         return $this->get('/generations', $query);
     }
 
-    public function usage(): array
+    /**
+     * @param  array<string, mixed>  $query
+     * @return array<string, mixed>
+     */
+    public function usage(array $query = []): array
     {
-        return $this->get('/usage');
+        return $this->get('/usage', $query);
     }
 
     protected function get(string $uri, array $query = []): array

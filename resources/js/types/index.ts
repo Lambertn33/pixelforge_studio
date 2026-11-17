@@ -9,3 +9,4 @@ export type {
 export type { PageLink, Paginator } from './pagination';
 
 export type { DashboardCard } from './dashboard';
+export type { UsageDayRow, UsageReport, UsageTotals } from './usage';
