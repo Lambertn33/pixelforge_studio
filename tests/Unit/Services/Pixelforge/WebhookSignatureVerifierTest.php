@@ -4,19 +4,6 @@ use App\Exceptions\Pixelforge\InvalidWebhookSignatureException;
 use App\Services\Pixelforge\WebhookSignatureVerifier;
 use Illuminate\Support\Carbon;
 
-/**
- * @return array{0: string, 1: string}
- */
-function signedPixelforgeWebhook(
-    string $rawBody,
-    int $timestamp,
-    string $secret = 'whsec_test_secret_for_signature_verifier',
-): array {
-    $signature = hash_hmac('sha256', $timestamp.'.'.$rawBody, $secret);
-
-    return [$rawBody, "t={$timestamp},v1={$signature}"];
-}
-
 function pixelforgeWebhookVerifier(
     string $secret = 'whsec_test_secret_for_signature_verifier',
     int $toleranceSeconds = 300,

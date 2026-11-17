@@ -44,7 +44,15 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
-{
-    // ..
+/**
+ * @return array{0: string, 1: string}
+ */
+function signedPixelforgeWebhook(
+    string $rawBody,
+    int $timestamp,
+    string $secret = 'whsec_test_secret_for_signature_verifier',
+): array {
+    $signature = hash_hmac('sha256', $timestamp.'.'.$rawBody, $secret);
+
+    return [$rawBody, "t={$timestamp},v1={$signature}"];
 }
