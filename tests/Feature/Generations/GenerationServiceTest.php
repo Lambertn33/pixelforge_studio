@@ -157,7 +157,14 @@ it('submits a local generation to Pixelforge with an idempotency key', function 
 
     expect($generation->status)->toBe(GenerationStatus::Queued)
         ->and($generation->pixelforge_id)->toBe('gen_01TESTGENERATION000000000001')
-        ->and($generation->client_request_id)->not->toBeEmpty();
+        ->and($generation->client_request_id)->not->toBeEmpty()
+        ->and($generation->pricing_snapshot['rates'])->toMatchArray([
+            'input_text_tokens' => '5.00',
+            'input_image_tokens' => '10.00',
+            'output_tokens' => '40.00',
+            'reasoning_tokens' => '12.50',
+        ])
+        ->and($generation->pricing_snapshot['provider_rates_source'])->toBe('create_response');
 
     Http::assertSent(fn ($request) => $request->url() === 'https://pixelforge.test/v1/pricing');
 
@@ -173,4 +180,87 @@ it('submits a local generation to Pixelforge with an idempotency key', function 
             && $request['reference_images'] === $referenceImages
             && $request['metadata']['client_request_id'] === $generation->client_request_id;
     });
+});
+
+it('attaches pixelforge id without overwriting a finished local state', function () {
+    fakePixelforgePricing();
+
+    $user = User::factory()->create();
+    $service = app(GenerationService::class);
+
+    $generation = $service->createLocalGeneration(
+        user: $user,
+        prompt: 'A lighthouse on a cliff at dawn',
+        size: GenerationSize::Landscape,
+        quality: GenerationQuality::High,
+    );
+
+    $generation->forceFill([
+        'status' => GenerationStatus::Succeeded,
+        'actual_provider_cost' => '0.010000000',
+        'actual_customer_cost' => '0.012500000',
+        'usage' => [
+            'input_text_tokens' => 10,
+            'input_image_tokens' => 0,
+            'output_tokens' => 100,
+            'reasoning_tokens' => 20,
+            'total_tokens' => 130,
+        ],
+        'completed_at' => now(),
+        'image_url' => 'https://pixelforge.test/images/done.png',
+    ])->save();
+
+    $updated = $service->applyProviderCreateResponse($generation, [
+        'id' => 'gen_01LATECREATERESPONSE00000001',
+        'object' => 'generation',
+        'status' => 'queued',
+        'rates' => [
+            'input_text_tokens' => '5.00',
+            'input_image_tokens' => '10.00',
+            'output_tokens' => '40.00',
+            'reasoning_tokens' => '12.50',
+        ],
+    ]);
+
+    expect($updated->status)->toBe(GenerationStatus::Succeeded)
+        ->and($updated->pixelforge_id)->toBe('gen_01LATECREATERESPONSE00000001')
+        ->and($updated->actual_provider_cost)->toBe('0.010000000')
+        ->and($updated->actual_customer_cost)->toBe('0.012500000')
+        ->and($updated->usage['total_tokens'])->toBe(130)
+        ->and($updated->image_url)->toBe('https://pixelforge.test/images/done.png')
+        ->and($updated->pricing_snapshot['rates']['output_tokens'])->toBe('40.00');
+});
+
+it('does not regress processing back to queued from a late create response', function () {
+    fakePixelforgePricing();
+
+    $user = User::factory()->create();
+    $service = app(GenerationService::class);
+
+    $generation = $service->createLocalGeneration(
+        user: $user,
+        prompt: 'A lighthouse on a cliff at dawn',
+        size: GenerationSize::Square,
+        quality: GenerationQuality::Low,
+    );
+
+    $generation->forceFill([
+        'status' => GenerationStatus::Processing,
+        'started_at' => now(),
+    ])->save();
+
+    $updated = $service->applyProviderCreateResponse($generation, [
+        'id' => 'gen_01PROCESSINGRACE00000000001',
+        'object' => 'generation',
+        'status' => 'queued',
+        'rates' => [
+            'input_text_tokens' => '5.00',
+            'input_image_tokens' => '10.00',
+            'output_tokens' => '40.00',
+            'reasoning_tokens' => '12.50',
+        ],
+    ]);
+
+    expect($updated->status)->toBe(GenerationStatus::Processing)
+        ->and($updated->pixelforge_id)->toBe('gen_01PROCESSINGRACE00000000001');
 });

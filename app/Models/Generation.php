@@ -65,9 +65,9 @@ class Generation extends Model
         return $this->hasMany(CreditTransaction::class);
     }
 
-    public function isTerminal(): bool
+    public function isFinished(): bool
     {
-        return $this->status->isTerminal();
+        return $this->status->isFinished();
     }
 
     /**

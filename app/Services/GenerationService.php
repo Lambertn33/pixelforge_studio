@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\Pixelforge\PixelforgeClient;
 use App\Services\Pricing\PricingCalculator;
 use App\Services\Pricing\PricingResult;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class GenerationService
@@ -96,11 +97,7 @@ class GenerationService
 
         $providerGeneration = $this->createWithProvider($generation);
 
-        $generation->forceFill([
-            'pixelforge_id' => $providerGeneration['id'],
-        ])->save();
-
-        return $generation->refresh();
+        return $this->applyProviderCreateResponse($generation, $providerGeneration);
     }
 
     /**
@@ -127,5 +124,67 @@ class GenerationService
             $payload,
             $generation->client_request_id,
         );
+    }
+
+    /**
+     * Attach fields from the Pixelforge create response without clobbering a newer local state.
+     *
+     * @param  array<string, mixed>  $providerGeneration
+     */
+    public function applyProviderCreateResponse(Generation $generation, array $providerGeneration): Generation
+    {
+        return DB::transaction(function () use ($generation, $providerGeneration): Generation {
+            /** @var Generation $locked */
+            $locked = Generation::query()
+                ->whereKey($generation->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $updates = [];
+
+            if ($locked->pixelforge_id === null && isset($providerGeneration['id']) && is_string($providerGeneration['id'])) {
+                $updates['pixelforge_id'] = $providerGeneration['id'];
+            }
+
+            if (isset($providerGeneration['rates']) && is_array($providerGeneration['rates'])) {
+                /** @var array<string, mixed> $snapshot */
+                $snapshot = $locked->pricing_snapshot ?? [];
+                $snapshot['rates'] = $providerGeneration['rates'];
+                $snapshot['provider_rates_source'] = 'create_response';
+                $updates['pricing_snapshot'] = $snapshot;
+            }
+
+            if (! $locked->isFinished()) {
+                $providerStatus = isset($providerGeneration['status']) && is_string($providerGeneration['status'])
+                    ? GenerationStatus::tryFrom($providerGeneration['status'])
+                    : null;
+
+                if (
+                    $providerStatus !== null
+                    && $this->canApplyCreateStatus($locked->status, $providerStatus)
+                ) {
+                    $updates['status'] = $providerStatus;
+                }
+            }
+
+            if ($updates !== []) {
+                $locked->forceFill($updates)->save();
+            }
+
+            return $locked->refresh();
+        });
+    }
+
+    private function canApplyCreateStatus(GenerationStatus $current, GenerationStatus $incoming): bool
+    {
+        if ($current->isFinished() || $incoming->isFinished()) {
+            return false;
+        }
+
+        if ($current === GenerationStatus::Processing && $incoming === GenerationStatus::Queued) {
+            return false;
+        }
+
+        return true;
     }
 }

@@ -27,18 +27,18 @@ test('a generation belongs to a user and casts enums and money', function () {
         ->and($generation->size)->toBe(GenerationSize::Landscape)
         ->and($generation->quality)->toBe(GenerationQuality::High)
         ->and($generation->status)->toBe(GenerationStatus::Queued)
-        ->and($generation->isTerminal())->toBeFalse()
+        ->and($generation->isFinished())->toBeFalse()
         ->and($generation->estimated_provider_cost)->toBe('0.373875000')
         ->and($generation->estimated_customer_cost)->toBe('0.467343750')
         ->and($user->generations)->toHaveCount(1);
 });
 
-test('succeeded and failed generations are terminal', function () {
+test('succeeded and failed generations are finished', function () {
     $succeeded = Generation::factory()->succeeded()->create();
     $failed = Generation::factory()->failed()->create();
 
-    expect($succeeded->isTerminal())->toBeTrue()
-        ->and($failed->isTerminal())->toBeTrue()
+    expect($succeeded->isFinished())->toBeTrue()
+        ->and($failed->isFinished())->toBeTrue()
         ->and($failed->actual_customer_cost)->toBe('0.000000000');
 });
 

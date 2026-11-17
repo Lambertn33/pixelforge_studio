@@ -9,7 +9,7 @@ enum GenerationStatus: string
     case Succeeded = 'succeeded';
     case Failed = 'failed';
 
-    public function isTerminal(): bool
+    public function isFinished(): bool
     {
         return match ($this) {
             self::Succeeded, self::Failed => true,
