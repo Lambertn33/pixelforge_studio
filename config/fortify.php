@@ -163,8 +163,7 @@ return [
 
     'features' => [
         Features::registration(),
-        Features::resetPasswords(),
-        // Email verification, 2FA, and passkeys stay off until the Inertia UI lands.
+        // Password reset stays off until outbound mail is configured.
     ],
 
 ];

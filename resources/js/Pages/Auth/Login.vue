@@ -55,24 +55,14 @@ const submit = () => {
             </TheButton>
         </form>
 
-        <div class="mt-6 space-y-2 text-center text-sm text-muted">
-            <p>
-                <Link
-                    href="/forgot-password"
-                    class="font-medium text-ink underline-offset-4 hover:text-accent hover:underline"
-                >
-                    Forgot your password?
-                </Link>
-            </p>
-            <p>
-                No account?
-                <Link
-                    href="/register"
-                    class="font-medium text-ink underline-offset-4 hover:text-accent hover:underline"
-                >
-                    Register
-                </Link>
-            </p>
-        </div>
+        <p class="mt-6 text-center text-sm text-muted">
+            No account?
+            <Link
+                href="/register"
+                class="font-medium text-ink underline-offset-4 hover:text-accent hover:underline"
+            >
+                Register
+            </Link>
+        </p>
     </GuestLayout>
 </template>

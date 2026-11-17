@@ -4,7 +4,13 @@ use App\Http\Controllers\GenerationController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
-Route::view('/', 'welcome')->name('home');
+Route::get('/', function () {
+    if (auth()->check()) {
+        return redirect()->route('dashboard');
+    }
+
+    return Inertia::render('Welcome');
+})->name('home');
 
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', function () {
