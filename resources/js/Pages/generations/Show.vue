@@ -20,7 +20,7 @@ const props = defineProps<{
 const POLL_INTERVAL_MS = 2500;
 
 const isPolling = ref(false);
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+let pollControls: { stop: () => void; start: () => void; destroy: () => void } | null = null;
 
 const breadcrumbItems = computed(() => [
     { label: 'Generations', href: '/generations' },
@@ -39,35 +39,27 @@ const formatCost = (value: string | null): string => {
 };
 
 const stopPolling = (): void => {
-    if (pollTimer !== null) {
-        clearInterval(pollTimer);
-        pollTimer = null;
-    }
-
+    pollControls?.stop();
+    pollControls?.destroy();
+    pollControls = null;
     isPolling.value = false;
 };
 
-const pollGeneration = (): void => {
-    if (isFinished(props.generation.status)) {
-        stopPolling();
-
-        return;
-    }
-
-    router.reload({
-        only: ['generation'],
-        preserveScroll: true,
-        preserveState: true,
-    });
-};
-
 const startPolling = (): void => {
-    if (isFinished(props.generation.status) || pollTimer !== null) {
+    if (isFinished(props.generation.status) || pollControls !== null) {
         return;
     }
 
     isPolling.value = true;
-    pollTimer = setInterval(pollGeneration, POLL_INTERVAL_MS);
+    pollControls = router.poll(
+        POLL_INTERVAL_MS,
+        {
+            only: ['generation'],
+        },
+        {
+            autoStart: true,
+        },
+    );
 };
 
 watch(
