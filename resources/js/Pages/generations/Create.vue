@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import TheBreadcrumb from '@/components/ui/TheBreadcrumb.vue';
 import TheButton from '@/components/ui/TheButton.vue';
 import TheSelect from '@/components/ui/TheSelect.vue';
 import TheTextArea from '@/components/ui/TheTextArea.vue';
@@ -48,11 +49,18 @@ const submit = () => {
 </script>
 
 <template>
-    <Head title="Generate" />
+    <Head title="Create generation" />
+
+    <TheBreadcrumb
+        :items="[
+            { label: 'Generations', href: '/generations' },
+            { label: 'Create new' },
+        ]"
+    />
 
     <div class="mx-auto max-w-xl">
         <div class="mb-8 text-center">
-            <h1 class="text-3xl font-semibold tracking-tight text-ink">Generate</h1>
+            <h1 class="text-3xl font-semibold tracking-tight text-ink">Create new</h1>
             <p class="mt-2 text-sm text-muted">
                 Write a prompt, choose size and quality, then create your image.
             </p>
