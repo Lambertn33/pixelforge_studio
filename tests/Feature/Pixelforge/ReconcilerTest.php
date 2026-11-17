@@ -144,6 +144,109 @@ it('moves a queued generation to processing when the provider says so', function
         ->and($generation->started_at)->not->toBeNull();
 });
 
+it('does not downgrade a generation that finished after polling started', function () {
+    $generation = Generation::factory()->processing()->create([
+        'pixelforge_id' => 'gen_01RECONCILERACE000000000001',
+        'pricing_snapshot' => reconcileFrozenPricingSnapshot(),
+        'submitted_at' => now()->subMinutes(5),
+    ]);
+
+    Http::fake(function () use ($generation) {
+        $generation->forceFill([
+            'status' => GenerationStatus::Succeeded,
+            'image_url' => 'https://pixelforge.test/images/final.png',
+            'completed_at' => now(),
+            'actual_provider_cost' => '0.046125000',
+            'actual_customer_cost' => '0.057656250',
+        ])->save();
+
+        return Http::response([
+            'id' => 'gen_01RECONCILERACE000000000001',
+            'object' => 'generation',
+            'status' => 'processing',
+            'started_at' => '2026-11-17T10:00:05Z',
+        ]);
+    });
+
+    $result = app(Reconciler::class)->reconcile();
+
+    $generation->refresh();
+
+    expect($result['applied'])->toBe(1)
+        ->and($generation->status)->toBe(GenerationStatus::Succeeded)
+        ->and($generation->image_url)->toBe('https://pixelforge.test/images/final.png')
+        ->and($generation->actual_customer_cost)->toBe('0.057656250');
+});
+
+it('leaves a generation unfinished when a succeeded poll is missing frozen rates', function () {
+    $generation = Generation::factory()->processing()->create([
+        'pixelforge_id' => 'gen_01RECONCILEMISSINGRATES000001',
+        'pricing_snapshot' => null,
+        'submitted_at' => now()->subMinutes(5),
+    ]);
+
+    Http::fake([
+        'pixelforge.test/v1/generations/gen_01RECONCILEMISSINGRATES000001' => Http::response([
+            'id' => 'gen_01RECONCILEMISSINGRATES000001',
+            'object' => 'generation',
+            'status' => 'succeeded',
+            'usage' => [
+                'input_text_tokens' => 12,
+                'input_image_tokens' => 0,
+                'output_tokens' => 1100,
+                'reasoning_tokens' => 500,
+                'total_tokens' => 1612,
+            ],
+        ]),
+    ]);
+
+    $result = app(Reconciler::class)->reconcile();
+
+    expect($result)->toMatchArray([
+        'attempted' => 1,
+        'applied' => 0,
+        'skipped' => 1,
+        'failed' => 0,
+    ])
+        ->and($generation->fresh()->status)->toBe(GenerationStatus::Processing);
+});
+
+it('leaves a queued generation unchanged when the provider is still queued', function () {
+    $generation = Generation::factory()->create([
+        'status' => GenerationStatus::Queued,
+        'pixelforge_id' => 'gen_01RECONCILESTILLQUEUED0000001',
+        'submitted_at' => now()->subMinutes(5),
+    ]);
+
+    Http::fake([
+        'pixelforge.test/v1/generations/gen_01RECONCILESTILLQUEUED0000001' => Http::response([
+            'id' => 'gen_01RECONCILESTILLQUEUED0000001',
+            'object' => 'generation',
+            'status' => 'queued',
+        ]),
+    ]);
+
+    $result = app(Reconciler::class)->reconcile();
+
+    expect($result['applied'])->toBe(1)
+        ->and($generation->fresh()->status)->toBe(GenerationStatus::Queued)
+        ->and($generation->fresh()->started_at)->toBeNull();
+});
+
+it('does not poll finished generations', function () {
+    Generation::factory()->succeeded()->create([
+        'pixelforge_id' => 'gen_01RECONCILEFINISHED000000001',
+        'submitted_at' => now()->subMinutes(10),
+    ]);
+
+    Http::fake();
+
+    $result = app(Reconciler::class)->reconcile();
+
+    expect($result['attempted'])->toBe(0);
+    Http::assertNothingSent();
+});
+
 it('continues the batch when one provider request fails', function () {
     $failing = Generation::factory()->processing()->create([
         'pixelforge_id' => 'gen_01RECONCILEHTTPFAIL000000001',
