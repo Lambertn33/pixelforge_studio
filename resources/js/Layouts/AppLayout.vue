@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import type { AuthProps } from '@/types/auth';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
-
-defineProps<{
-    title: string;
-}>();
 
 defineSlots<{
     default: () => unknown;
@@ -18,14 +14,12 @@ const page = usePage<{
 
 const user = computed(() => page.props.auth.user);
 
-const logout = () => {
+const logout = (): void => {
     router.post('/logout');
 };
 </script>
 
 <template>
-    <Head :title="title" />
-
     <div class="min-h-screen bg-surface text-ink">
         <header class="border-b border-border bg-surface">
             <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
