@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Webhooks;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\Pixelforge\ProcessWebhook;
 use App\Services\Pixelforge\WebhookReceiver;
 use App\Services\Pixelforge\WebhookSignatureVerifier;
 use Illuminate\Http\Request;
@@ -22,11 +23,15 @@ class PixelforgeController extends Controller
             $request->header('Pixelforge-Signature'),
         );
 
-        $receiver->receive(
+        $received = $receiver->receive(
             $rawBody,
             $request->header('Pixelforge-Event-Id'),
             $request->header('Pixelforge-Event-Type'),
         );
+
+        if ($received['event']->processed_at === null) {
+            ProcessWebhook::dispatch($received['event']->id)->afterCommit();
+        }
 
         return response()->noContent();
     }

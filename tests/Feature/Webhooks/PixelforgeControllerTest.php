@@ -1,8 +1,10 @@
 <?php
 
 use App\Enums\PixelforgeEventType;
+use App\Jobs\Pixelforge\ProcessWebhook;
 use App\Models\WebhookEvent;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\TestResponse;
 
 beforeEach(function () {
@@ -12,6 +14,7 @@ beforeEach(function () {
     ]);
 
     Carbon::setTestNow(Carbon::createFromTimestamp(1_700_000_000));
+    Queue::fake([ProcessWebhook::class]);
 });
 
 afterEach(function () {
@@ -41,7 +44,7 @@ function postSignedPixelforgeWebhook(array $payload, array $headers = []): TestR
     );
 }
 
-it('accepts a signed webhook and persists the event', function () {
+it('accepts a signed webhook, persists the event, and queues processing', function () {
     $payload = [
         'id' => 'evt_01TESTPING000000000000001',
         'object' => 'event',
@@ -62,6 +65,8 @@ it('accepts a signed webhook and persists the event', function () {
         ->and($event->payload['id'])->toBe('evt_01TESTPING000000000000001')
         ->and($event->processed_at)->toBeNull()
         ->and($event->received_at)->not->toBeNull();
+
+    Queue::assertPushed(ProcessWebhook::class, fn (ProcessWebhook $job): bool => $job->webhookEventId === $event->id);
 });
 
 it('returns success for duplicate deliveries without creating another row', function () {
@@ -77,6 +82,49 @@ it('returns success for duplicate deliveries without creating another row', func
     postSignedPixelforgeWebhook($payload)->assertNoContent();
 
     expect(WebhookEvent::query()->where('event_id', 'evt_01TESTDUPLICATE0000000001')->count())->toBe(1);
+
+    // Still unique-locked while the first job sits unprocessed on the queue.
+    Queue::assertPushed(ProcessWebhook::class, 1);
+});
+
+it('does not queue processing again when the duplicate was already processed', function () {
+    $event = WebhookEvent::factory()->ping()->processed()->create([
+        'event_id' => 'evt_01TESTALREADYDONE00000001',
+    ]);
+
+    postSignedPixelforgeWebhook([
+        'id' => $event->event_id,
+        'object' => 'event',
+        'type' => 'ping',
+        'created_at' => '2026-11-17T10:00:00Z',
+        'data' => ['object' => null],
+    ])->assertNoContent();
+
+    Queue::assertNothingPushed();
+    expect(WebhookEvent::query()->where('event_id', $event->event_id)->count())->toBe(1);
+});
+
+it('queues processing again for an unprocessed duplicate after the unique lock is free', function () {
+    $event = WebhookEvent::factory()->succeeded()->create([
+        'event_id' => 'evt_01TESTNEEDRETRY0000000001',
+        'processed_at' => null,
+    ]);
+
+    postSignedPixelforgeWebhook([
+        'id' => $event->event_id,
+        'object' => 'event',
+        'type' => 'generation.succeeded',
+        'created_at' => '2026-11-17T10:00:00Z',
+        'data' => [
+            'object' => [
+                'id' => 'gen_01TESTNEEDRETRY00000000001',
+                'status' => 'succeeded',
+            ],
+        ],
+    ])->assertNoContent();
+
+    expect(WebhookEvent::query()->where('event_id', $event->event_id)->count())->toBe(1);
+    Queue::assertPushed(ProcessWebhook::class, fn (ProcessWebhook $job): bool => $job->webhookEventId === $event->id);
 });
 
 it('rejects a webhook with a missing signature', function () {
@@ -89,6 +137,7 @@ it('rejects a webhook with a missing signature', function () {
         ->assertSee('Invalid Pixelforge signature.');
 
     expect(WebhookEvent::query()->count())->toBe(0);
+    Queue::assertNothingPushed();
 });
 
 it('rejects a webhook with an invalid signature', function () {
@@ -108,6 +157,7 @@ it('rejects a webhook with an invalid signature', function () {
         ->assertSee('Invalid Pixelforge signature.');
 
     expect(WebhookEvent::query()->count())->toBe(0);
+    Queue::assertNothingPushed();
 });
 
 it('rejects a signed webhook with an invalid payload', function () {
@@ -128,6 +178,7 @@ it('rejects a signed webhook with an invalid payload', function () {
         ->assertSee('Webhook event id is missing.');
 
     expect(WebhookEvent::query()->count())->toBe(0);
+    Queue::assertNothingPushed();
 });
 
 it('does not require a csrf token', function () {
