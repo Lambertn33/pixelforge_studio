@@ -2,15 +2,23 @@
 
 namespace App\Services\Pixelforge;
 
+use App\Enums\CreditTransactionType;
 use App\Enums\GenerationStatus;
 use App\Enums\PixelforgeEventType;
+use App\Models\CreditTransaction;
 use App\Models\Generation;
+use App\Models\User;
 use App\Models\WebhookEvent;
+use App\Services\Pricing\PricingCalculator;
+use App\Services\Pricing\PricingResult;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class WebhookProcessor
 {
+    public function __construct(private PricingCalculator $pricing) {}
+
     public function process(int $webhookEventId): void
     {
         /** @var WebhookEvent|null $event */
@@ -32,8 +40,9 @@ class WebhookProcessor
             return;
         }
 
-        $this->applyEvent($event, $generation);
-        $event->markProcessed();
+        if ($this->applyEvent($event, $generation)) {
+            $event->markProcessed();
+        }
     }
 
     private function associateGeneration(WebhookEvent $event): ?Generation
@@ -61,11 +70,11 @@ class WebhookProcessor
         return $generation->fresh();
     }
 
-    private function applyEvent(WebhookEvent $event, Generation $generation): void
+    private function applyEvent(WebhookEvent $event, Generation $generation): bool
     {
         $object = $this->generationObject($event) ?? [];
 
-        DB::transaction(function () use ($event, $generation, $object): void {
+        return DB::transaction(function () use ($event, $generation, $object): bool {
             /** @var Generation $locked */
             $locked = Generation::query()
                 ->whereKey($generation->id)
@@ -73,20 +82,126 @@ class WebhookProcessor
                 ->firstOrFail();
 
             if ($locked->isFinished()) {
-                return;
+                return true;
             }
 
-            $updates = match ($event->event_type) {
-                PixelforgeEventType::GenerationProcessing => $this->processingUpdates($locked, $object),
-                PixelforgeEventType::GenerationSucceeded => $this->succeededUpdates($locked, $object),
-                PixelforgeEventType::GenerationFailed => $this->failedUpdates($locked, $object),
-                PixelforgeEventType::Ping => [],
-            };
+            if ($event->event_type === PixelforgeEventType::GenerationProcessing) {
+                $locked->forceFill($this->processingUpdates($locked, $object))->save();
 
-            if ($updates !== []) {
-                $locked->forceFill($updates)->save();
+                return true;
             }
+
+            if ($event->event_type === PixelforgeEventType::GenerationSucceeded) {
+                return $this->applySucceeded($locked, $object);
+            }
+
+            if ($event->event_type === PixelforgeEventType::GenerationFailed) {
+                return $this->applyFailed($locked, $object);
+            }
+
+            return true;
         });
+    }
+
+    /**
+     * @param  array<string, mixed>  $object
+     */
+    private function applySucceeded(Generation $locked, array $object): bool
+    {
+        $usage = isset($object['usage']) && is_array($object['usage'])
+            ? $object['usage']
+            : $locked->usage;
+
+        $rates = data_get($locked->pricing_snapshot, 'rates');
+
+        if (! is_array($usage) || ! is_array($rates)) {
+            return false;
+        }
+
+        $currency = is_string(data_get($locked->pricing_snapshot, 'currency'))
+            ? data_get($locked->pricing_snapshot, 'currency')
+            : 'usd';
+
+        $result = $this->pricing->actual(
+            usage: $usage,
+            rates: $rates,
+            currency: $currency,
+        );
+
+        $updates = $this->succeededUpdates($locked, $object);
+        $updates['usage'] = $usage;
+        $updates['actual_provider_cost'] = $result->providerCostDollars();
+        $updates['actual_customer_cost'] = $result->customerCostDollars();
+        $updates['pricing_snapshot'] = $this->mergePricingSnapshot($locked, $result);
+
+        $locked->forceFill($updates)->save();
+        $this->recordGenerationCharge($locked, $result);
+
+        return true;
+    }
+
+    /**
+     * @param  array<string, mixed>  $object
+     */
+    private function applyFailed(Generation $locked, array $object): bool
+    {
+        $currency = is_string(data_get($locked->pricing_snapshot, 'currency'))
+            ? data_get($locked->pricing_snapshot, 'currency')
+            : 'usd';
+
+        $result = $this->pricing->zero($currency);
+
+        $updates = $this->failedUpdates($locked, $object);
+        $updates['actual_provider_cost'] = $result->providerCostDollars();
+        $updates['actual_customer_cost'] = $result->customerCostDollars();
+        $updates['pricing_snapshot'] = $this->mergePricingSnapshot($locked, $result);
+
+        $locked->forceFill($updates)->save();
+
+        return true;
+    }
+
+    private function recordGenerationCharge(Generation $generation, PricingResult $result): void
+    {
+        User::query()->whereKey($generation->user_id)->lockForUpdate()->firstOrFail();
+
+        $previousBalance = CreditTransaction::query()
+            ->where('user_id', $generation->user_id)
+            ->orderByDesc('id')
+            ->value('balance_after') ?? '0.000000000';
+
+        $amount = bcmul($result->customerCostDollars(), '-1', 9);
+        $balanceAfter = bcadd((string) $previousBalance, $amount, 9);
+
+        try {
+            CreditTransaction::query()->create([
+                'user_id' => $generation->user_id,
+                'generation_id' => $generation->id,
+                'type' => CreditTransactionType::GenerationCharge,
+                'amount' => $amount,
+                'balance_after' => $balanceAfter,
+                'currency' => $result->currency,
+                'idempotency_key' => 'generation_charge:'.$generation->id,
+                'description' => 'Charge for successful generation',
+                'metadata' => [
+                    'provider_cost_usd' => $result->providerCostDollars(),
+                    'customer_cost_usd' => $result->customerCostDollars(),
+                ],
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            // Already charged for this generation.
+        }
+    }
+
+    private function mergePricingSnapshot(Generation $generation, PricingResult $result): array
+    {
+        /** @var array<string, mixed> $snapshot */
+        $snapshot = $generation->pricing_snapshot ?? [];
+
+        return [
+            ...$snapshot,
+            ...$result->toSnapshot(),
+        ];
     }
 
     /**
@@ -116,10 +231,6 @@ class WebhookProcessor
         if (isset($object['image_url']) && is_string($object['image_url']) && $object['image_url'] !== '') {
             $updates['image_url'] = $object['image_url'];
             $updates['image_url_expires_at'] = $this->imageUrlExpiresAt($object['image_url']);
-        }
-
-        if (isset($object['usage']) && is_array($object['usage'])) {
-            $updates['usage'] = $object['usage'];
         }
 
         return $updates;

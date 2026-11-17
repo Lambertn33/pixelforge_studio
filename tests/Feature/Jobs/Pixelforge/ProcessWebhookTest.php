@@ -1,11 +1,31 @@
 <?php
 
+use App\Enums\CreditTransactionType;
 use App\Enums\GenerationStatus;
 use App\Jobs\Pixelforge\ProcessWebhook;
+use App\Models\CreditTransaction;
 use App\Models\Generation;
 use App\Models\WebhookEvent;
 use App\Services\Pixelforge\WebhookProcessor;
 use Illuminate\Support\Str;
+
+/**
+ * @return array<string, mixed>
+ */
+function frozenPricingSnapshot(): array
+{
+    return [
+        'currency' => 'usd',
+        'unit' => 'per_1m_tokens',
+        'is_estimate' => true,
+        'rates' => [
+            'input_text_tokens' => '5.00',
+            'input_image_tokens' => '10.00',
+            'output_tokens' => '40.00',
+            'reasoning_tokens' => '12.50',
+        ],
+    ];
+}
 
 it('marks ping events as processed', function () {
     $event = WebhookEvent::factory()->ping()->create();
@@ -67,9 +87,15 @@ it('moves a queued generation to processing', function () {
         ->and($generation->started_at)->not->toBeNull();
 });
 
-it('applies a succeeded generation payload', function () {
+it('charges the user and stores actual costs when a generation succeeds', function () {
     $generation = Generation::factory()->processing()->create([
         'pixelforge_id' => 'gen_01SUCCEEDEDSTATE0000000001',
+        'pricing_snapshot' => frozenPricingSnapshot(),
+    ]);
+
+    CreditTransaction::factory()->purchase('10.000000000')->create([
+        'user_id' => $generation->user_id,
+        'balance_after' => '10.000000000',
     ]);
 
     $event = WebhookEvent::factory()->succeeded()->create([
@@ -101,18 +127,35 @@ it('applies a succeeded generation payload', function () {
 
     $generation->refresh();
     $event->refresh();
+    $charge = CreditTransaction::query()
+        ->where('generation_id', $generation->id)
+        ->where('type', CreditTransactionType::GenerationCharge)
+        ->first();
 
+    // (12*5 + 0 + 1100*40 + 500*12.50) / 1e6 = 0.050310000 provider → 0.062887500 customer
     expect($event->processed_at)->not->toBeNull()
         ->and($generation->status)->toBe(GenerationStatus::Succeeded)
         ->and($generation->image_url)->toStartWith('https://pixelforge.test/images/done.png')
         ->and($generation->image_url_expires_at?->getTimestamp())->toBe(1762351409)
         ->and($generation->usage['total_tokens'])->toBe(1612)
-        ->and($generation->completed_at)->not->toBeNull();
+        ->and($generation->actual_provider_cost)->toBe('0.050310000')
+        ->and($generation->actual_customer_cost)->toBe('0.062887500')
+        ->and($generation->completed_at)->not->toBeNull()
+        ->and($charge)->not->toBeNull()
+        ->and($charge->amount)->toBe('-0.062887500')
+        ->and($charge->balance_after)->toBe('9.937112500')
+        ->and($charge->idempotency_key)->toBe('generation_charge:'.$generation->id);
 });
 
-it('applies a failed generation payload', function () {
+it('stores zero actual costs and does not charge when a generation fails', function () {
     $generation = Generation::factory()->processing()->create([
         'pixelforge_id' => 'gen_01FAILEDSTATE0000000000001',
+        'pricing_snapshot' => frozenPricingSnapshot(),
+    ]);
+
+    CreditTransaction::factory()->purchase('10.000000000')->create([
+        'user_id' => $generation->user_id,
+        'balance_after' => '10.000000000',
     ]);
 
     $event = WebhookEvent::factory()->failed()->create([
@@ -143,8 +186,48 @@ it('applies a failed generation payload', function () {
     expect($generation->status)->toBe(GenerationStatus::Failed)
         ->and($generation->error_code)->toBe('generation_failed')
         ->and($generation->error_message)->toBe('The model could not produce an image for the prompt.')
+        ->and($generation->actual_provider_cost)->toBe('0.000000000')
+        ->and($generation->actual_customer_cost)->toBe('0.000000000')
         ->and($generation->completed_at)->not->toBeNull()
-        ->and($event->fresh()->processed_at)->not->toBeNull();
+        ->and($event->fresh()->processed_at)->not->toBeNull()
+        ->and(CreditTransaction::query()->where('generation_id', $generation->id)->count())->toBe(0);
+});
+
+it('leaves a succeeded event unprocessed when frozen rates are missing', function () {
+    $generation = Generation::factory()->processing()->create([
+        'pixelforge_id' => 'gen_01MISSINGRATES000000000001',
+        'pricing_snapshot' => null,
+    ]);
+
+    $event = WebhookEvent::factory()->succeeded()->create([
+        'generation_id' => null,
+        'payload' => [
+            'id' => 'evt_01MISSINGRATES000000000001',
+            'object' => 'event',
+            'type' => 'generation.succeeded',
+            'data' => [
+                'object' => [
+                    'id' => 'gen_01MISSINGRATES000000000001',
+                    'status' => 'succeeded',
+                    'usage' => [
+                        'input_text_tokens' => 12,
+                        'input_image_tokens' => 0,
+                        'output_tokens' => 1100,
+                        'reasoning_tokens' => 500,
+                        'total_tokens' => 1612,
+                    ],
+                    'metadata' => [],
+                ],
+            ],
+        ],
+    ]);
+
+    (new ProcessWebhook($event->id))->handle(app(WebhookProcessor::class));
+
+    expect($generation->fresh()->status)->toBe(GenerationStatus::Processing)
+        ->and($event->fresh()->generation_id)->toBe($generation->id)
+        ->and($event->fresh()->processed_at)->toBeNull()
+        ->and(CreditTransaction::query()->where('generation_id', $generation->id)->count())->toBe(0);
 });
 
 it('does not regress a finished generation when a late processing event arrives', function () {
