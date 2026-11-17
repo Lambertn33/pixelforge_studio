@@ -22,6 +22,24 @@ const usageRows = computed(() => {
         { label: 'Total', value: usage.total_tokens },
     ].filter((row) => typeof row.value === 'number');
 });
+
+const billingNotice = computed(() => {
+    if (props.generation.status === 'succeeded') {
+        return {
+            tone: 'charged' as const,
+            text: `Charged ${formatCost(props.generation.actual_customer_cost)} to your account.`,
+        };
+    }
+
+    if (props.generation.status === 'failed') {
+        return {
+            tone: 'free' as const,
+            text: 'Not charged — failed generations are free.',
+        };
+    }
+
+    return null;
+});
 </script>
 
 <template>
@@ -51,6 +69,18 @@ const usageRows = computed(() => {
                 <dd>{{ formatCost(generation.actual_provider_cost) }}</dd>
             </div>
         </dl>
+
+        <p
+            v-if="billingNotice"
+            :class="[
+                'rounded-lg border px-3 py-2 text-sm',
+                billingNotice.tone === 'charged'
+                    ? 'border-accent/30 bg-accent/10 text-accent'
+                    : 'border-border bg-surface text-muted',
+            ]"
+        >
+            {{ billingNotice.text }}
+        </p>
 
         <div v-if="usageRows.length > 0" class="space-y-3 border-t border-border pt-4">
             <h3 class="text-xs font-medium uppercase tracking-wide text-muted">Usage</h3>
