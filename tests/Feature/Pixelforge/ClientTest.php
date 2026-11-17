@@ -1,7 +1,7 @@
 <?php
 
-use App\Exceptions\Pixelforge\PixelforgeRequestException;
-use App\Services\Pixelforge\PixelforgeClient;
+use App\Exceptions\Pixelforge\RequestException;
+use App\Services\Pixelforge\Client;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
@@ -25,7 +25,7 @@ test('pricing returns the provider payload', function () {
         ]),
     ]);
 
-    $payload = app(PixelforgeClient::class)->pricing();
+    $payload = app(Client::class)->pricing();
 
     expect($payload)->toMatchArray([
         'currency' => 'usd',
@@ -44,7 +44,7 @@ test('createGeneration sends an idempotency key', function () {
         ], 201),
     ]);
 
-    $payload = app(PixelforgeClient::class)->createGeneration(
+    $payload = app(Client::class)->createGeneration(
         [
             'prompt' => 'A red fox',
             'size' => '1024x1024',
@@ -72,9 +72,9 @@ test('maps permanent provider errors without retrying', function () {
     ]);
 
     try {
-        app(PixelforgeClient::class)->getGeneration('gen_missing');
-        $this->fail('Expected PixelforgeRequestException');
-    } catch (PixelforgeRequestException $exception) {
+        app(Client::class)->getGeneration('gen_missing');
+        $this->fail('Expected RequestException');
+    } catch (RequestException $exception) {
         expect($exception->status)->toBe(404)
             ->and($exception->errorCode)->toBe('not_found')
             ->and($exception->isNotFound())->toBeTrue()
@@ -92,7 +92,7 @@ test('retries transient provider failures then succeeds', function () {
             ->push(['requests' => 3], 200),
     ]);
 
-    $payload = app(PixelforgeClient::class)->usage();
+    $payload = app(Client::class)->usage();
 
     expect($payload)->toMatchArray(['requests' => 3]);
 
@@ -110,9 +110,9 @@ test('throws after exhausting retries for rate limits', function () {
     ]);
 
     try {
-        app(PixelforgeClient::class)->pricing();
-        $this->fail('Expected PixelforgeRequestException');
-    } catch (PixelforgeRequestException $exception) {
+        app(Client::class)->pricing();
+        $this->fail('Expected RequestException');
+    } catch (RequestException $exception) {
         expect($exception->isRateLimited())->toBeTrue()
             ->and($exception->retryAfterSeconds)->toBe(2)
             ->and($exception->isRetryable())->toBeTrue();

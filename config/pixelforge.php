@@ -20,6 +20,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Webhooks
+    |--------------------------------------------------------------------------
+    |
+    | Reject signed deliveries whose timestamp is older (or newer) than this
+    | many seconds to limit replay attacks.
+    |
+    */
+
+    'webhook_tolerance_seconds' => (int) env('PIXELFORGE_WEBHOOK_TOLERANCE_SECONDS', 300),
+
+    /*
+    |--------------------------------------------------------------------------
     | HTTP client
     |--------------------------------------------------------------------------
     */

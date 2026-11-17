@@ -4,11 +4,11 @@ namespace App\Exceptions\Pixelforge;
 
 use Exception;
 use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\RequestException as HttpClientRequestException;
 use Illuminate\Http\Client\Response;
 use Throwable;
 
-class PixelforgeRequestException extends Exception
+class RequestException extends Exception
 {
     /**
      * @param  array<string, mixed>  $body
@@ -24,7 +24,7 @@ class PixelforgeRequestException extends Exception
         parent::__construct($message, $status, $previous);
     }
 
-    public static function fromRequestException(RequestException $exception): self
+    public static function fromRequestException(HttpClientRequestException $exception): self
     {
         $response = $exception->response;
 

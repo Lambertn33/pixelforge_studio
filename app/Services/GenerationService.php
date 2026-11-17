@@ -6,10 +6,10 @@ use App\Enums\GenerationQuality;
 use App\Enums\GenerationSize;
 use App\Enums\GenerationStatus;
 use App\Exceptions\GenerationProviderException;
-use App\Exceptions\Pixelforge\PixelforgeRequestException;
+use App\Exceptions\Pixelforge\RequestException;
 use App\Models\Generation;
 use App\Models\User;
-use App\Services\Pixelforge\PixelforgeClient;
+use App\Services\Pixelforge\Client;
 use App\Services\Pricing\PricingCalculator;
 use App\Services\Pricing\PricingResult;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +18,7 @@ use Illuminate\Support\Str;
 class GenerationService
 {
     public function __construct(
-        private PixelforgeClient $pixelforge,
+        private Client $pixelforge,
         private PricingCalculator $pricing,
     ) {}
 
@@ -99,7 +99,7 @@ class GenerationService
 
         try {
             $providerGeneration = $this->createWithProvider($generation);
-        } catch (PixelforgeRequestException $exception) {
+        } catch (RequestException $exception) {
             $failed = $this->markFailedFromProvider($generation, $exception);
 
             throw GenerationProviderException::fromProvider($failed, $exception);
@@ -139,7 +139,7 @@ class GenerationService
      *
      * Failed generations are never billed. Skips updates when the row is already finished.
      */
-    public function markFailedFromProvider(Generation $generation, PixelforgeRequestException $exception): Generation
+    public function markFailedFromProvider(Generation $generation, RequestException $exception): Generation
     {
         $errorCode = $this->providerErrorCode($exception);
         $errorMessage = $this->userFacingProviderMessage($exception);
@@ -231,7 +231,7 @@ class GenerationService
         return true;
     }
 
-    private function providerErrorCode(PixelforgeRequestException $exception): string
+    private function providerErrorCode(RequestException $exception): string
     {
         if ($exception->errorCode !== null && $exception->errorCode !== '') {
             return $exception->errorCode;
@@ -251,7 +251,7 @@ class GenerationService
         };
     }
 
-    private function userFacingProviderMessage(PixelforgeRequestException $exception): string
+    private function userFacingProviderMessage(RequestException $exception): string
     {
         if ($exception->status === 429) {
             if ($exception->retryAfterSeconds !== null && $exception->retryAfterSeconds > 0) {

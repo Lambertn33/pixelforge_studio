@@ -4,7 +4,7 @@ use App\Enums\GenerationQuality;
 use App\Enums\GenerationSize;
 use App\Enums\GenerationStatus;
 use App\Exceptions\GenerationProviderException;
-use App\Exceptions\Pixelforge\PixelforgeRequestException;
+use App\Exceptions\Pixelforge\RequestException;
 use App\Models\Generation;
 use App\Models\User;
 use App\Services\GenerationService;
@@ -358,7 +358,7 @@ it('does not overwrite a finished generation when marking provider failure', fun
         'image_url' => 'https://pixelforge.test/images/done.png',
     ])->save();
 
-    $exception = new PixelforgeRequestException(
+    $exception = new RequestException(
         message: 'Overloaded',
         status: 503,
         errorCode: 'provider_overloaded',
@@ -378,7 +378,7 @@ it('renders provider failures as a flash error for web requests', function () {
         'error_message' => 'The image service is overloaded. Please try again shortly.',
     ]);
 
-    $providerException = new PixelforgeRequestException(
+    $providerException = new RequestException(
         message: 'Overloaded',
         status: 503,
         errorCode: 'provider_overloaded',

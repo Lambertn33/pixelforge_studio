@@ -2,7 +2,7 @@
 
 namespace App\Exceptions;
 
-use App\Exceptions\Pixelforge\PixelforgeRequestException;
+use App\Exceptions\Pixelforge\RequestException;
 use App\Models\Generation;
 use Exception;
 use Illuminate\Http\RedirectResponse;
@@ -13,12 +13,12 @@ class GenerationProviderException extends Exception
     public function __construct(
         public readonly Generation $generation,
         string $message,
-        public readonly PixelforgeRequestException $providerException,
+        public readonly RequestException $providerException,
     ) {
         parent::__construct($message, previous: $providerException);
     }
 
-    public static function fromProvider(Generation $generation, PixelforgeRequestException $exception): self
+    public static function fromProvider(Generation $generation, RequestException $exception): self
     {
         return new self(
             generation: $generation,

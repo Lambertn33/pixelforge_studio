@@ -2,15 +2,15 @@
 
 namespace App\Services\Pixelforge;
 
-use App\Exceptions\Pixelforge\PixelforgeRequestException;
+use App\Exceptions\Pixelforge\RequestException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
-use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\RequestException as HttpClientRequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Throwable;
 
-class PixelforgeClient
+class Client
 {
     public function pricing(): array
     {
@@ -55,11 +55,11 @@ class PixelforgeClient
         try {
             $response = $callback();
         } catch (ConnectionException $exception) {
-            throw PixelforgeRequestException::fromConnectionException($exception);
+            throw RequestException::fromConnectionException($exception);
         }
 
         if ($response->failed()) {
-            throw PixelforgeRequestException::fromResponse($response);
+            throw RequestException::fromResponse($response);
         }
 
         /** @var array<string, mixed> $json */
@@ -94,7 +94,7 @@ class PixelforgeClient
             times: $times,
             sleepMilliseconds: function (int $attempt, mixed $exception) use ($defaultSleepMs): int {
                 if (
-                    $exception instanceof RequestException
+                    $exception instanceof HttpClientRequestException
                     && $exception->response !== null
                     && $exception->response->status() === 429
                 ) {
@@ -112,7 +112,7 @@ class PixelforgeClient
                     return true;
                 }
 
-                if (! $exception instanceof RequestException || $exception->response === null) {
+                if (! $exception instanceof HttpClientRequestException || $exception->response === null) {
                     return false;
                 }
 
