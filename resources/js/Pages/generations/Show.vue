@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import TheBreadcrumb from '@/components/ui/TheBreadcrumb.vue';
 import TheStatusBadge from '@/components/ui/TheStatusBadge.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
-import type { AuthUser, Generation } from '@/types';
-import { Head } from '@inertiajs/vue3';
+import type { AuthUser, Generation, GenerationStatus } from '@/types';
+import { Head, router } from '@inertiajs/vue3';
 
 defineOptions({
     layout: AppLayout,
@@ -17,10 +17,18 @@ const props = defineProps<{
     generation: Generation;
 }>();
 
+const POLL_INTERVAL_MS = 2500;
+
+const isPolling = ref(false);
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+
 const breadcrumbItems = computed(() => [
     { label: 'Generations', href: '/generations' },
     { label: `#${props.generation.id}` },
 ]);
+
+const isFinished = (status: GenerationStatus): boolean =>
+    status === 'succeeded' || status === 'failed';
 
 const formatCost = (value: string | null): string => {
     if (value === null) {
@@ -29,6 +37,55 @@ const formatCost = (value: string | null): string => {
 
     return `$${value}`;
 };
+
+const stopPolling = (): void => {
+    if (pollTimer !== null) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+    }
+
+    isPolling.value = false;
+};
+
+const pollGeneration = (): void => {
+    if (isFinished(props.generation.status)) {
+        stopPolling();
+
+        return;
+    }
+
+    router.reload({
+        only: ['generation'],
+        preserveScroll: true,
+        preserveState: true,
+    });
+};
+
+const startPolling = (): void => {
+    if (isFinished(props.generation.status) || pollTimer !== null) {
+        return;
+    }
+
+    isPolling.value = true;
+    pollTimer = setInterval(pollGeneration, POLL_INTERVAL_MS);
+};
+
+watch(
+    () => props.generation.status,
+    (status) => {
+        if (isFinished(status)) {
+            stopPolling();
+        }
+    },
+);
+
+onMounted(() => {
+    startPolling();
+});
+
+onBeforeUnmount(() => {
+    stopPolling();
+});
 </script>
 
 <template>
@@ -41,6 +98,7 @@ const formatCost = (value: string | null): string => {
             <div class="flex flex-wrap items-center gap-3">
                 <h1 class="text-2xl font-semibold text-ink">Generation #{{ generation.id }}</h1>
                 <TheStatusBadge :status="generation.status" />
+                <span v-if="isPolling" class="text-xs text-muted">Checking status…</span>
             </div>
             <p class="mt-2 max-w-2xl text-sm text-ink/80">{{ generation.prompt }}</p>
         </div>

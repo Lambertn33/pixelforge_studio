@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Enums\GenerationQuality;
 use App\Enums\GenerationSize;
+use App\Http\Requests\EstimateGenerationRequest;
 use App\Http\Requests\StoreGenerationRequest;
 use App\Models\Generation;
 use App\Services\GenerationService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -52,6 +54,23 @@ class GenerationController extends Controller
         return redirect()
             ->route('generations.show', $generation)
             ->with('status', 'Generation submitted.');
+    }
+
+    public function estimate(EstimateGenerationRequest $request, GenerationService $generations): JsonResponse
+    {
+        $result = $generations->estimate(
+            prompt: $request->prompt(),
+            size: $request->size(),
+            quality: $request->quality(),
+            referenceImages: $request->referenceImages(),
+        );
+
+        return response()->json([
+            'currency' => $result->currency,
+            'customer_cost' => $result->customerCostDollars(),
+            'provider_cost' => $result->providerCostDollars(),
+            'usage' => $result->usage,
+        ]);
     }
 
     public function show(Generation $generation): Response

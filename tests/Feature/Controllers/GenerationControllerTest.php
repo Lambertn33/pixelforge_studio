@@ -59,6 +59,39 @@ it('redirects guests away from generation pages', function () {
     $this->get(route('generations.index'))->assertRedirect(route('login'));
     $this->get(route('generations.create'))->assertRedirect(route('login'));
     $this->post(route('generations.store'), [])->assertRedirect(route('login'));
+    $this->post(route('generations.estimate'), [])->assertRedirect(route('login'));
+});
+
+it('returns a live cost estimate as json', function () {
+    Http::fake([
+        'pixelforge.test/v1/pricing' => Http::response(generationControllerPricingFixture()),
+    ]);
+
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->postJson(route('generations.estimate'), [
+            'prompt' => str_repeat('a', 400),
+            'size' => GenerationSize::Square->value,
+            'quality' => GenerationQuality::Low->value,
+        ])
+        ->assertOk()
+        ->assertJsonStructure([
+            'currency',
+            'customer_cost',
+            'provider_cost',
+            'usage',
+        ])
+        ->assertJsonPath('currency', 'usd');
+});
+
+it('validates estimate payloads', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->postJson(route('generations.estimate'), [])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['prompt', 'size', 'quality']);
 });
 
 it('renders the generate form for authenticated users', function () {

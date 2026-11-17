@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import TheBreadcrumb from '@/components/ui/TheBreadcrumb.vue';
 import TheButton from '@/components/ui/TheButton.vue';
 import TheSelect from '@/components/ui/TheSelect.vue';
@@ -19,6 +19,12 @@ const props = defineProps<{
     sizes: GenerationSize[];
     qualities: GenerationQuality[];
 }>();
+
+type EstimateResponse = {
+    currency: string;
+    customer_cost: string;
+    provider_cost: string;
+};
 
 const sizeOptions = computed(() =>
     props.sizes.map((size) => ({
@@ -41,6 +47,129 @@ const form = useForm({
         ? 'medium'
         : (props.qualities[0] ?? 'medium')) as GenerationQuality,
     reference_images: [] as string[],
+});
+
+const estimate = ref<EstimateResponse | null>(null);
+const estimating = ref(false);
+const estimateError = ref<string | null>(null);
+
+let estimateTimer: ReturnType<typeof setTimeout> | null = null;
+let estimateRequestId = 0;
+let estimateAbort: AbortController | null = null;
+
+const xsrfToken = (): string => {
+    const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]*)/);
+
+    return match ? decodeURIComponent(match[1]) : '';
+};
+
+const clearEstimate = (): void => {
+    estimate.value = null;
+    estimating.value = false;
+    estimateError.value = null;
+};
+
+const fetchEstimate = async (): Promise<void> => {
+    const prompt = form.prompt.trim();
+
+    if (prompt === '') {
+        clearEstimate();
+
+        return;
+    }
+
+    estimateAbort?.abort();
+    estimateAbort = new AbortController();
+    const requestId = ++estimateRequestId;
+
+    estimating.value = true;
+    estimateError.value = null;
+
+    try {
+        const response = await fetch('/generations/estimate', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-XSRF-TOKEN': xsrfToken(),
+            },
+            signal: estimateAbort.signal,
+            body: JSON.stringify({
+                prompt,
+                size: form.size,
+                quality: form.quality,
+                reference_images: form.reference_images,
+            }),
+        });
+
+        if (requestId !== estimateRequestId) {
+            return;
+        }
+
+        if (! response.ok) {
+            const payload = await response.json().catch(() => null);
+            const message =
+                payload?.message ??
+                payload?.errors?.prompt?.[0] ??
+                'Could not estimate cost right now.';
+
+            estimate.value = null;
+            estimateError.value = message;
+            estimating.value = false;
+
+            return;
+        }
+
+        estimate.value = (await response.json()) as EstimateResponse;
+        estimating.value = false;
+    } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+            return;
+        }
+
+        if (requestId !== estimateRequestId) {
+            return;
+        }
+
+        estimate.value = null;
+        estimateError.value = 'Could not estimate cost right now.';
+        estimating.value = false;
+    }
+};
+
+const scheduleEstimate = (): void => {
+    if (estimateTimer !== null) {
+        clearTimeout(estimateTimer);
+    }
+
+    if (form.prompt.trim() === '') {
+        clearEstimate();
+
+        return;
+    }
+
+    estimating.value = true;
+    estimateError.value = null;
+    estimateTimer = setTimeout(() => {
+        void fetchEstimate();
+    }, 300);
+};
+
+watch(
+    () => [form.prompt, form.size, form.quality] as const,
+    () => {
+        scheduleEstimate();
+    },
+);
+
+onBeforeUnmount(() => {
+    if (estimateTimer !== null) {
+        clearTimeout(estimateTimer);
+    }
+
+    estimateAbort?.abort();
 });
 
 const submit = () => {
@@ -99,6 +228,18 @@ const submit = () => {
                     :options="qualityOptions"
                     :error="form.errors.quality"
                 />
+            </div>
+
+            <div
+                class="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-sm"
+            >
+                <span class="text-muted">Estimated cost</span>
+                <span v-if="estimating" class="text-muted">Estimating…</span>
+                <span v-else-if="estimateError" class="text-danger">{{ estimateError }}</span>
+                <span v-else-if="estimate" class="font-medium text-accent">
+                    ${{ estimate.customer_cost }}
+                </span>
+                <span v-else class="text-muted">—</span>
             </div>
 
             <div class="flex items-center justify-end pt-2">

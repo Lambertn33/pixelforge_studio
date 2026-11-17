@@ -11,6 +11,9 @@ Route::middleware('auth')->group(function () {
         return Inertia::render('Dashboard');
     })->name('dashboard');
 
+    Route::post('/generations/estimate', [GenerationController::class, 'estimate'])
+        ->name('generations.estimate');
+
     Route::resource('generations', GenerationController::class)
         ->only(['index', 'create', 'store', 'show']);
 });
