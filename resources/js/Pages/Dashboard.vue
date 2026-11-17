@@ -48,11 +48,16 @@ const cards = ref<DashboardCard[]>([
     <DashboardCards :cards="cards" />
 
     <div class="mt-8">
-        <Link href="/dashboard">
-            <TheButton type="button">
-                <VIcon name="hi-plus" scale="0.95" />
-                Generate image
-            </TheButton>
-        </Link>
+        <div class="flex flex-wrap gap-3">
+            <Link href="/generations/create">
+                <TheButton type="button">
+                    <VIcon name="hi-plus" scale="0.95" />
+                    Generate image
+                </TheButton>
+            </Link>
+            <Link href="/generations" class="text-sm text-ink/60 hover:text-ink self-center">
+                View history
+            </Link>
+        </div>
     </div>
 </template>
