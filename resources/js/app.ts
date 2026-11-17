@@ -25,7 +25,7 @@ addIcons(
 );
 
 createInertiaApp({
-    pages: './pages',
+    pages: './Pages',
     title: (title) =>
         title ? `${title} — PixelForge Studio` : 'PixelForge Studio',
     progress: {

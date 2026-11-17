@@ -3,7 +3,7 @@ import { ref } from 'vue';
 import DashboardCards from '@/components/dashboard/Cards.vue';
 import DashboardHeader from '@/components/dashboard/Header.vue';
 import TheButton from '@/components/ui/TheButton.vue';
-import AppLayout from '@/layouts/AppLayout.vue';
+import AppLayout from '@/Layouts/AppLayout.vue';
 import type { AuthUser, DashboardCard } from '@/types';
 import { Head, Link } from '@inertiajs/vue3';
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import TheButton from '@/components/ui/TheButton.vue';
 import TheInput from '@/components/ui/TheInput.vue';
-import GuestLayout from '@/layouts/GuestLayout.vue';
+import GuestLayout from '@/Layouts/GuestLayout.vue';
 import { Link, useForm } from '@inertiajs/vue3';
 
 const form = useForm({

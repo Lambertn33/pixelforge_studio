@@ -3,7 +3,7 @@ import EmptyState from '@/components/generations/list/EmptyState.vue';
 import Header from '@/components/generations/list/Header.vue';
 import Table from '@/components/generations/list/Table.vue';
 import TheBreadcrumb from '@/components/ui/TheBreadcrumb.vue';
-import AppLayout from '@/layouts/AppLayout.vue';
+import AppLayout from '@/Layouts/AppLayout.vue';
 import type { AuthUser, Generation, Paginator } from '@/types';
 import { Head } from '@inertiajs/vue3';
 

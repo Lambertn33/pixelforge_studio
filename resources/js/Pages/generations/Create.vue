@@ -2,7 +2,7 @@
 import GenerationForm from '@/components/generations/form/GenerationForm.vue';
 import Header from '@/components/generations/form/Header.vue';
 import TheBreadcrumb from '@/components/ui/TheBreadcrumb.vue';
-import AppLayout from '@/layouts/AppLayout.vue';
+import AppLayout from '@/Layouts/AppLayout.vue';
 import type { AuthUser, GenerationQuality, GenerationSize } from '@/types';
 import { Head } from '@inertiajs/vue3';
 

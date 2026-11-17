@@ -5,13 +5,13 @@ use App\Models\User;
 test('login screen can be rendered', function () {
     $this->get(route('login'))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->component('auth/Login'));
+        ->assertInertia(fn ($page) => $page->component('Auth/Login'));
 });
 
 test('register screen can be rendered', function () {
     $this->get(route('register'))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->component('auth/Register'));
+        ->assertInertia(fn ($page) => $page->component('Auth/Register'));
 });
 
 test('users can register', function () {

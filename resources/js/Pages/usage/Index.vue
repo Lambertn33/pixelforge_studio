@@ -3,7 +3,7 @@ import Header from '@/components/usage/Header.vue';
 import DayTable from '@/components/usage/DayTable.vue';
 import Summary from '@/components/usage/Summary.vue';
 import Filters from '@/components/usage/Filters.vue';
-import AppLayout from '@/layouts/AppLayout.vue';
+import AppLayout from '@/Layouts/AppLayout.vue';
 import type { UsageReport } from '@/types/usage';
 import { Head } from '@inertiajs/vue3';
 

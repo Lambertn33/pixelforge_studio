@@ -5,7 +5,7 @@ import Header from '@/components/generations/item/Header.vue';
 import Preview from '@/components/generations/item/Preview.vue';
 import TheBreadcrumb from '@/components/ui/TheBreadcrumb.vue';
 import { useGenerationPoll } from '@/composables/useGenerationPoll';
-import AppLayout from '@/layouts/AppLayout.vue';
+import AppLayout from '@/Layouts/AppLayout.vue';
 import type { AuthUser, Generation } from '@/types';
 import { Head } from '@inertiajs/vue3';
 
