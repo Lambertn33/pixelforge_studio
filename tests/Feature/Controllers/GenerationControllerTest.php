@@ -56,8 +56,11 @@ function fakeGenerationControllerProvider(): void
 }
 
 it('redirects guests away from generation pages', function () {
+    $generation = Generation::factory()->create();
+
     $this->get(route('generations.index'))->assertRedirect(route('login'));
     $this->get(route('generations.create'))->assertRedirect(route('login'));
+    $this->get(route('generations.show', $generation))->assertRedirect(route('login'));
     $this->post(route('generations.store'), [])->assertRedirect(route('login'));
     $this->post(route('generations.estimate'), [])->assertRedirect(route('login'));
 });

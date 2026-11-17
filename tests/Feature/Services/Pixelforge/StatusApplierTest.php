@@ -111,3 +111,32 @@ it('returns false when a succeeded status is missing frozen rates', function () 
         ->and($generation->fresh()->status)->toBe(GenerationStatus::Processing)
         ->and(CreditTransaction::query()->where('generation_id', $generation->id)->count())->toBe(0);
 });
+
+it('does not replace a succeeded generation with a late failed status', function () {
+    $generation = Generation::factory()->succeeded()->create([
+        'pixelforge_id' => 'gen_01STATUSAPPLIER000000000001',
+        'image_url' => 'https://pixelforge.test/images/final.png',
+        'actual_customer_cost' => '0.057656250',
+    ]);
+
+    $applied = app(StatusApplier::class)->apply(
+        $generation,
+        GenerationStatus::Failed,
+        [
+            'id' => 'gen_01STATUSAPPLIER000000000001',
+            'status' => 'failed',
+            'error' => [
+                'code' => 'generation_failed',
+                'message' => 'Late failure should be ignored.',
+            ],
+        ],
+    );
+
+    $generation->refresh();
+
+    expect($applied)->toBeTrue()
+        ->and($generation->status)->toBe(GenerationStatus::Succeeded)
+        ->and($generation->image_url)->toBe('https://pixelforge.test/images/final.png')
+        ->and($generation->actual_customer_cost)->toBe('0.057656250')
+        ->and($generation->error_code)->toBeNull();
+});
