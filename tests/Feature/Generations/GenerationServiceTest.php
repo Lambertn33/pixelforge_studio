@@ -3,9 +3,13 @@
 use App\Enums\GenerationQuality;
 use App\Enums\GenerationSize;
 use App\Enums\GenerationStatus;
+use App\Exceptions\GenerationProviderException;
+use App\Exceptions\Pixelforge\PixelforgeRequestException;
 use App\Models\Generation;
 use App\Models\User;
 use App\Services\GenerationService;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
@@ -263,4 +267,133 @@ it('does not regress processing back to queued from a late create response', fun
 
     expect($updated->status)->toBe(GenerationStatus::Processing)
         ->and($updated->pixelforge_id)->toBe('gen_01PROCESSINGRACE00000000001');
+});
+
+it('marks the local generation failed when Pixelforge rejects create', function () {
+    $user = User::factory()->create();
+
+    Http::fake([
+        'pixelforge.test/v1/pricing' => Http::response(generationServicePricingFixture()),
+        'pixelforge.test/v1/generations' => Http::response([
+            'error' => [
+                'code' => 'validation_failed',
+                'message' => 'Unknown parameter: colour.',
+            ],
+        ], 422),
+    ]);
+
+    try {
+        app(GenerationService::class)->submit(
+            user: $user,
+            prompt: 'A lighthouse on a cliff at dawn',
+            size: GenerationSize::Landscape,
+            quality: GenerationQuality::High,
+        );
+
+        $this->fail('Expected GenerationProviderException');
+    } catch (GenerationProviderException $exception) {
+        $generation = $exception->generation->fresh();
+
+        expect($exception->getMessage())->toBe('Unknown parameter: colour.')
+            ->and($generation->status)->toBe(GenerationStatus::Failed)
+            ->and($generation->error_code)->toBe('validation_failed')
+            ->and($generation->error_message)->toBe('Unknown parameter: colour.')
+            ->and($generation->actual_provider_cost)->toBe('0.000000000')
+            ->and($generation->actual_customer_cost)->toBe('0.000000000')
+            ->and($generation->completed_at)->not->toBeNull()
+            ->and($generation->pixelforge_id)->toBeNull();
+    }
+
+    expect(Generation::query()->count())->toBe(1);
+});
+
+it('marks the local generation failed on provider rate limits', function () {
+    $user = User::factory()->create();
+
+    Http::fake([
+        'pixelforge.test/v1/pricing' => Http::response(generationServicePricingFixture()),
+        'pixelforge.test/v1/generations' => Http::response([
+            'error' => [
+                'code' => 'rate_limited',
+                'message' => 'Too many requests',
+            ],
+        ], 429, ['Retry-After' => '12']),
+    ]);
+
+    try {
+        app(GenerationService::class)->submit(
+            user: $user,
+            prompt: 'A lighthouse on a cliff at dawn',
+            size: GenerationSize::Square,
+            quality: GenerationQuality::Low,
+        );
+
+        $this->fail('Expected GenerationProviderException');
+    } catch (GenerationProviderException $exception) {
+        expect($exception->getMessage())->toBe('Too many requests right now. Please wait 12 seconds and try again.')
+            ->and($exception->generation->status)->toBe(GenerationStatus::Failed)
+            ->and($exception->generation->error_code)->toBe('rate_limited')
+            ->and($exception->generation->actual_customer_cost)->toBe('0.000000000');
+    }
+});
+
+it('does not overwrite a finished generation when marking provider failure', function () {
+    fakePixelforgePricing();
+
+    $user = User::factory()->create();
+    $service = app(GenerationService::class);
+
+    $generation = $service->createLocalGeneration(
+        user: $user,
+        prompt: 'A lighthouse on a cliff at dawn',
+        size: GenerationSize::Landscape,
+        quality: GenerationQuality::High,
+    );
+
+    $generation->forceFill([
+        'status' => GenerationStatus::Succeeded,
+        'actual_provider_cost' => '0.010000000',
+        'actual_customer_cost' => '0.012500000',
+        'completed_at' => now(),
+        'image_url' => 'https://pixelforge.test/images/done.png',
+    ])->save();
+
+    $exception = new PixelforgeRequestException(
+        message: 'Overloaded',
+        status: 503,
+        errorCode: 'provider_overloaded',
+    );
+
+    $updated = $service->markFailedFromProvider($generation, $exception);
+
+    expect($updated->status)->toBe(GenerationStatus::Succeeded)
+        ->and($updated->error_code)->toBeNull()
+        ->and($updated->error_message)->toBeNull()
+        ->and($updated->actual_customer_cost)->toBe('0.012500000')
+        ->and($updated->image_url)->toBe('https://pixelforge.test/images/done.png');
+});
+
+it('renders provider failures as a flash error for web requests', function () {
+    $generation = Generation::factory()->failed()->create([
+        'error_message' => 'The image service is overloaded. Please try again shortly.',
+    ]);
+
+    $providerException = new PixelforgeRequestException(
+        message: 'Overloaded',
+        status: 503,
+        errorCode: 'provider_overloaded',
+    );
+
+    $exception = GenerationProviderException::fromProvider($generation, $providerException);
+
+    $request = Request::create('/generations', 'POST', [
+        'prompt' => 'A lighthouse on a cliff at dawn',
+    ]);
+    $request->headers->set('X-Inertia', 'true');
+    $request->setLaravelSession(app('session.store'));
+
+    $response = $exception->render($request);
+
+    expect($response)->toBeInstanceOf(RedirectResponse::class)
+        ->and(session('error'))->toBe('The image service is overloaded. Please try again shortly.');
 });
