@@ -32,6 +32,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Reconciliation polling
+    |--------------------------------------------------------------------------
+    |
+    | Scheduled fallback for generations that stay queued/processing when a
+    | webhook is missed. Only rows older than min_age_seconds are polled so
+    | fresh webhooks get the first chance.
+    |
+    */
+
+    'reconciliation' => [
+        'min_age_seconds' => (int) env('PIXELFORGE_RECONCILE_MIN_AGE_SECONDS', 60),
+        'batch_size' => (int) env('PIXELFORGE_RECONCILE_BATCH_SIZE', 50),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | HTTP client
     |--------------------------------------------------------------------------
     */
