@@ -2,7 +2,7 @@
 
 A Laravel + Vue/Inertia SaaS for generating images through the **Pixelforge** API.
 
-Users register, submit a prompt with a live cost estimate, and track each job from queued → processing → succeeded/failed. Costs use nanodollar precision with a **25% markup** on provider price. Webhooks drive status updates; a scheduled reconciler covers missed deliveries. A **Usage** page reconciles Pixelforge `GET /usage` against local succeeded costs.
+Users register, submit a prompt with a live cost estimate, and track each job from queued → processing → succeeded/failed. Costs use nanodollar precision with a **25% markup** on provider price. Webhooks drive status updates; a scheduled reconciler covers missed deliveries. A **Usage** page reconciles Pixelforge `GET /usage` against local succeeded costs. **My generations** supports typo-tolerant prompt search via Laravel Scout + Typesense (Postgres remains the source of truth).
 
 ---
 
@@ -14,7 +14,7 @@ Users register, submit a prompt with a live cost estimate, and track each job fr
 | Auth | `/login`, `/register` | Fortify (password reset is off until mail is configured) |
 | Dashboard | `/dashboard` | Studio home |
 | Generate | `/generations/create` | Prompt form + live estimate |
-| History | `/generations` | Own generations only |
+| History | `/generations` | Own generations only; optional `?q=` Typesense prompt search |
 | Detail | `/generations/{id}` | Preview, costs, token usage; polls while non-terminal |
 | Usage | `/usage` | Compare provider billing vs local ledger costs (stretch) |
 
@@ -68,7 +68,7 @@ Customer totals on that page include markup; provider totals should match Pixelf
 - A Pixelforge API key (and webhook secret for live webhooks)
 - Optional: a public tunnel so Pixelforge can reach your local webhook URL
 
-Stack inside Docker: PHP 8.4, PostgreSQL 16, Redis 8, Node 22 (Vite), queue worker, scheduler.
+Stack inside Docker: PHP 8.4, PostgreSQL 16, Redis 8, Typesense 30.2 (search index), Node 22 (Vite), queue worker, scheduler.
 
 ---
 
@@ -85,6 +85,7 @@ cp .env.example .env
 | `APP_KEY` | Boot | Generated in the next step |
 | `PIXELFORGE_API_KEY` | Create / estimate / usage | From the Pixelforge dashboard |
 | `PIXELFORGE_WEBHOOK_SECRET` | Live webhooks | Same dashboard; leave empty until configured |
+| `TYPESENSE_API_KEY` | Prompt search | Must match the Compose Typesense service (default `pixelforgestudio`) |
 
 ### 2. Start the stack
 
@@ -98,25 +99,30 @@ docker compose up -d --build
 | `vite` | Frontend HMR | http://localhost:5173 |
 | `postgres` | Database | localhost:5433 |
 | `redis` | Queue + cache | localhost:6381 |
+| `typesense` | Search index (Scout) | **Not** published — only `typesense:8108` on the Compose network |
 | `queue` | `queue:work` (webhook jobs) | — |
 | `scheduler` | `schedule:work` (reconcile every minute) | — |
 
-### 3. Install PHP deps, key, migrate
+### 3. Install PHP deps, key, migrate, search index
 
-Run Artisan **inside** the app container (`DB_HOST` is `postgres`):
+Run Artisan **inside** the app container (`DB_HOST` is `postgres`, Typesense is `typesense:8108`):
 
 ```bash
 docker compose exec app composer install
 docker compose exec app php artisan key:generate
 docker compose exec app php artisan migrate
+docker compose exec app php artisan scout:import "App\Models\Generation"
 ```
+
+Import once after first boot (or after restoring a DB dump). New/updated/deleted generations sync to Typesense automatically while `SCOUT_DRIVER=typesense`.
 
 ### 4. Open the app
 
 1. Visit http://localhost:8001  
 2. Register  
 3. **Start generating** → submit a prompt  
-4. Open **Usage** after some succeeded jobs to confirm provider vs local costs  
+4. Open **My generations** and try prompt search (including a typo such as `huose` for `house`)  
+5. Open **Usage** after some succeeded jobs to confirm provider vs local costs  
 
 Without a public webhook URL, jobs often stay pending until reconciliation (~**60s**+). That is expected on localhost.
 
@@ -134,8 +140,36 @@ Without a public webhook URL, jobs often stay pending until reconciliation (~**6
 | `PIXELFORGE_RECONCILE_BATCH_SIZE` | `50` | Max gens per reconcile run |
 | `PIXELFORGE_CONNECT_TIMEOUT` / `TIMEOUT` | `5` / `30` | HTTP timeouts (seconds) |
 | `PIXELFORGE_RETRY_TIMES` / `RETRY_SLEEP_MS` | `3` / `200` | Transient retry policy |
+| `SCOUT_DRIVER` | `typesense` | Search engine (`null` in `phpunit.xml`) |
+| `SCOUT_PREFIX` | empty | Optional index name prefix when sharing Typesense |
+| `SCOUT_QUEUE` | `false` | Queue Scout sync jobs (consider `true` in production) |
+| `TYPESENSE_API_KEY` | `pixelforgestudio` | Must match the Typesense container |
+| `TYPESENSE_HOST` / `PORT` / `PROTOCOL` | `typesense` / `8108` / `http` | Compose service hostname |
+| `TYPESENSE_PATH` | empty | Only if Typesense sits behind a reverse-proxy path |
 
 Local defaults: `APP_URL=http://localhost:8001`, `QUEUE_CONNECTION=redis`, `DB_HOST=postgres` (in Docker).
+
+---
+
+## Prompt search (Scout + Typesense)
+
+Postgres is the source of truth. Typesense is a **search index only** (not exposed on the host).
+
+| Behavior | Detail |
+| --- | --- |
+| Empty / whitespace `q` | Normal Postgres history (`latest id`) |
+| Non-empty `q` | Scout search on `prompt`, filtered by **auth `user_id`** (never from the client) |
+| Typos | Configured in `config/scout.php` (`num_typos`, `min_len_1typo=3` so short typos like `dgo`→`dog` work) |
+| UI | Debounced search on `/generations` (300ms); Clear restores full history |
+
+Schema / search settings live under `config/scout.php` → `typesense.model-settings` for `Generation`. Changing the collection schema after documents exist usually means flush + re-import:
+
+```bash
+docker compose exec app php artisan scout:flush "App\Models\Generation"
+docker compose exec app php artisan scout:import "App\Models\Generation"
+```
+
+If search returns nothing after a DB restore or before the first import, the index is empty — run `scout:import` again.
 
 ---
 
@@ -182,11 +216,17 @@ If you see “Unable to locate file in Vite manifest”, build assets or start V
 
 ## Tests
 
-In-memory SQLite (`phpunit.xml`) — no Postgres/Redis required.
+In-memory SQLite (`phpunit.xml`) — no Postgres/Redis required. Default `SCOUT_DRIVER=null` so most tests never call Typesense.
 
 ```bash
 php artisan test --compact
 docker compose exec app php artisan test --compact
+```
+
+`GenerationSearchTest` covers empty/`q` history, exact/partial match, auth isolation, and payload shape with the **collection** engine. Typo + index-sync cases need Typesense and **skip** when it is unreachable; run them inside Compose:
+
+```bash
+docker compose exec app php artisan test --compact tests/Feature/Controllers/GenerationSearchTest.php
 ```
 
 Lefthook: **pre-commit** Pint `--test`; **pre-push** full Pest suite.
@@ -198,9 +238,10 @@ Lefthook: **pre-commit** Pint `--test`; **pre-push** full Pest suite.
 1. HTTPS web server (`APP_URL` correct)  
 2. Queue worker + scheduler every minute  
 3. PostgreSQL migrated  
-4. `APP_DEBUG=false`, secrets set, webhook URL registered  
-5. `npm run build`  
-6. Smoke: register → generate → webhook/reconcile → one charge → Usage matched → `GET /up`  
+4. Typesense reachable; `TYPESENSE_*` set; `scout:import` after deploy/migrate  
+5. `APP_DEBUG=false`, secrets set, webhook URL registered  
+6. `npm run build`  
+7. Smoke: register → generate → webhook/reconcile → one charge → search typo → Usage matched → `GET /up`  
 
 ---
 
@@ -218,9 +259,10 @@ Lefthook: **pre-commit** Pint `--test`; **pre-push** full Pest suite.
 | Status + ledger charge | `StatusApplier`, `CreditTransaction` |
 | Pricing | `PricingCalculator` |
 | Pending poll | `Reconciler`, `pixelforge:reconcile-pending` |
-| Vue pages | `resources/js/pages/{Welcome,Dashboard,auth,generations,usage}` |
+| Prompt search | Scout `Searchable` on `Generation`, `config/scout.php` |
+| Vue pages | `resources/js/Pages/{Welcome,Dashboard,Auth,generations,usage}` |
 | Vue components | `resources/js/components/{generations,usage,ui}/` |
-| Config | `config/pixelforge.php` |
+| Config | `config/pixelforge.php`, `config/scout.php` |
 | Tests | `tests/Feature`, `tests/Unit` |
 
 ---
@@ -234,6 +276,7 @@ Lefthook: **pre-commit** Pint `--test`; **pre-push** full Pest suite.
 5. **Failed = free** — zero actual costs; no charge row.  
 6. **Exact money** — nanodollars; customer = provider × 5/4.  
 7. **Usage truth** — Pixelforge `GET /usage` is account/key billing; local sums should match provider cost.  
+8. **Search scope** — Typesense queries always filter by the authenticated user; empty `q` never leaves Postgres.  
 
 ---
 
@@ -243,6 +286,7 @@ Lefthook: **pre-commit** Pint `--test`; **pre-push** full Pest suite.
 docker compose up -d --build
 docker compose logs -f app queue scheduler
 docker compose exec app php artisan migrate
+docker compose exec app php artisan scout:import "App\Models\Generation"
 docker compose exec app php artisan pixelforge:reconcile-pending
 docker compose exec app php artisan test --compact
 ./vendor/bin/pint --dirty
