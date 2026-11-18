@@ -9,6 +9,7 @@ import {
     HiMail,
     HiPhotograph,
     HiPlus,
+    HiSearch,
     HiUser,
 } from 'oh-vue-icons/icons';
 import type { App } from 'vue';
@@ -21,6 +22,7 @@ addIcons(
     HiMail,
     HiPhotograph,
     HiPlus,
+    HiSearch,
     HiUser,
 );
 
