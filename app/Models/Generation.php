@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Laravel\Scout\Searchable;
 
 #[Fillable([
     'user_id',
@@ -41,6 +42,8 @@ class Generation extends Model
     /** @use HasFactory<GenerationFactory> */
     use HasFactory;
 
+    use Searchable;
+
     /**
      * @return BelongsTo<User, $this>
      */
@@ -68,6 +71,31 @@ class Generation extends Model
     public function isFinished(): bool
     {
         return $this->status->isFinished();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toSearchableArray(): array
+    {
+        return [
+            'id' => (string) $this->getKey(),
+            'user_id' => (int) $this->user_id,
+            'prompt' => (string) $this->prompt,
+            'status' => $this->status->value,
+            'size' => $this->size->value,
+            'created_at' => $this->created_at?->getTimestamp() ?? 0,
+        ];
+    }
+
+    /**
+     * Typesense search parameters beyond Scout's built-in query_by/prefix wiring.
+     *
+     * @return array<string, mixed>
+     */
+    public function typesenseSearchParameters(): array
+    {
+        return config('scout.typesense.model-settings.'.static::class.'.search-parameters', []);
     }
 
     /**
