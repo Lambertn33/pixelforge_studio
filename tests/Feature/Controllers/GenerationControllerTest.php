@@ -159,6 +159,7 @@ it('lists only the authenticated user generations', function () {
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('generations/Index')
+            ->where('filters.q', '')
             ->has('generations.data', 1)
             ->where('generations.data.0.id', $own->id)
             ->where('generations.data.0.prompt', 'My generation'));

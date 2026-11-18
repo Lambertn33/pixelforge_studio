@@ -20,14 +20,32 @@ class GenerationController extends Controller
     {
         $this->authorize('viewAny', Generation::class);
 
-        $generations = Generation::query()
-            ->where('user_id', $request->user()->id)
-            ->latest('id')
-            ->paginate(15)
+        $validated = $request->validate([
+            'q' => ['sometimes', 'nullable', 'string', 'max:255'],
+        ]);
+
+        $search = trim((string) ($validated['q'] ?? ''));
+        $userId = (int) $request->user()->id;
+
+        $generations = $search === ''
+            ? Generation::query()
+                ->where('user_id', $userId)
+                ->latest('id')
+                ->paginate(15)
+            : Generation::search($search)
+                ->where('user_id', $userId)
+                ->orderBy('created_at', 'desc')
+                ->paginate(15);
+
+        $generations = $generations
+            ->withQueryString()
             ->through(fn (Generation $generation): array => $this->generationPayload($generation));
 
         return Inertia::render('generations/Index', [
             'generations' => $generations,
+            'filters' => [
+                'q' => $search,
+            ],
         ]);
     }
 
