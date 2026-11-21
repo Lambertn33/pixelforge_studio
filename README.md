@@ -173,21 +173,29 @@ If search returns nothing after a DB restore or before the first import, the ind
 
 ---
 
-## Webhooks (local)
+## Webhooks
+
+Pixelforge POSTs status updates to your app when a generation starts, succeeds, or fails:
 
 ```text
-POST {APP_URL}/api/webhooks/pixelforge
+POST /api/webhooks/pixelforge
 ```
 
-Example: `https://YOUR-TUNNEL.example/api/webhooks/pixelforge`
+Keep `app` + `queue` running. Put the signing secret in `.env` as `PIXELFORGE_WEBHOOK_SECRET`. If no webhook URL is set, the reconciler still updates jobs after ~60s.
 
-1. Start Docker (`app` + `queue`).  
-2. Tunnel → **http://localhost:8001**.  
-3. Register the HTTPS URL + secret in the Pixelforge dashboard.  
-4. Set `PIXELFORGE_WEBHOOK_SECRET` in `.env`.  
-5. `docker compose up -d app queue`
+**Local:** expose the app (e.g. `expose share http://localhost:8001`), then in Pixelforge → Webhooks paste:
 
-Receiver flow: verify HMAC → persist/dedupe `WebhookEvent` → queue `ProcessWebhook` → resolve by `pixelforge_id` or `metadata.client_request_id` → `StatusApplier` → charge once on first `succeeded`.
+```text
+https://YOUR-EXPOSE-HOST/api/webhooks/pixelforge
+```
+
+**Production:** same idea — use the public server URL (open firewall port `8001` if needed):
+
+```text
+http://YOUR_HOST:8001/api/webhooks/pixelforge
+```
+
+Use a separate Pixelforge API key per environment when you can. Restart `app`/`queue` after changing the secret.
 
 ---
 
